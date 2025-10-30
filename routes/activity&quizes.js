@@ -6,15 +6,109 @@ const router = express.Router();
 
 router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
   const teacherId = req.user.id;
+  if (!teacherId)
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+
   const { code } = req.params;
   const {
     title,
     questions,
-    attemptsAllowed = 2,
+    attemptsAllowed = 1,
     startTime = null,
     endTime = null,
     timeLimitSeconds = null,
   } = req.body;
+
+  // helpers
+  const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
+  const asInt = (v, d = 0) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : d;
+  };
+  const ALLOWED_TYPES = new Set([
+    "multiple_choice",
+    "checkboxes",
+    "short_answer",
+    "paragraph",
+  ]);
+  const makeId = (p, i) => `srv-q-${p}-${Date.now()}-${i}`;
+  const makePageId = (i) => `srv-page-${Date.now()}-${i}`;
+
+  const sanitizeQuestion = (q, pIdx, qIdx) => {
+    const type = ALLOWED_TYPES.has(q?.type) ? q.type : "multiple_choice";
+    const base = {
+      id: q?.id || makeId(pIdx, qIdx),
+      type,
+      text: String(q?.text ?? "").trim() || "Untitled question",
+    };
+
+    if (type === "multiple_choice") {
+      const opts = Array.isArray(q?.options)
+        ? q.options.filter((s) => s != null).map(String)
+        : [];
+      const options = opts.length >= 2 ? opts : ["Option 1", "Option 2"];
+      const idx =
+        q?.correctAnswer == null ? null : asInt(q.correctAnswer, null);
+      const correctAnswer =
+        idx != null && idx >= 0 && idx < options.length ? String(idx) : null;
+      return { ...base, options, correctAnswer };
+    }
+
+    if (type === "checkboxes") {
+      const opts = Array.isArray(q?.options)
+        ? q.options.filter((s) => s != null).map(String)
+        : [];
+      const options = opts.length >= 2 ? opts : ["Option 1", "Option 2"];
+      const set = new Set(
+        Array.isArray(q?.correctAnswer)
+          ? q.correctAnswer
+              .map((v) => asInt(v, -1))
+              .filter((n) => n >= 0 && n < options.length)
+          : []
+      );
+      const correctAnswer = Array.from(set.values()).sort((a, b) => a - b);
+      return { ...base, options, correctAnswer };
+    }
+
+    if (type === "short_answer") {
+      const sentenceLimit = clamp(asInt(q?.sentenceLimit ?? 1, 1), 1, 3);
+      const correctAnswer = String(q?.correctAnswer ?? "");
+      return { ...base, sentenceLimit, correctAnswer };
+    }
+
+    // paragraph
+    const sentenceLimit = Math.max(3, asInt(q?.sentenceLimit ?? 3, 3));
+    const correctAnswer = String(q?.correctAnswer ?? "");
+    return { ...base, sentenceLimit, correctAnswer };
+  };
+
+  const normalizeToPages = (qs) => {
+    // If already { pages }, sanitize each page; otherwise wrap array into a single page
+    if (qs && Array.isArray(qs.pages)) {
+      return qs.pages.map((pg, pIdx) => ({
+        id: pg?.id || makePageId(pIdx),
+        title: String(pg?.title ?? `Page ${pIdx + 1}`),
+        questions: Array.isArray(pg?.questions)
+          ? pg.questions.map((q, qIdx) => sanitizeQuestion(q, pIdx, qIdx))
+          : [],
+      }));
+    }
+    const arr = Array.isArray(qs) ? qs : [];
+    return [
+      {
+        id: makePageId(0),
+        title: "Page 1",
+        questions: arr.map((q, qIdx) => sanitizeQuestion(q, 0, qIdx)),
+      },
+    ];
+  };
+
+  // normalized settings
+  const attempts = clamp(asInt(attemptsAllowed, 1), 1, 100);
+  const tls = (() => {
+    const n = asInt(timeLimitSeconds, 0);
+    return n > 0 ? n : null;
+  })();
 
   try {
     const classroomRows = await queryAsync(
@@ -29,24 +123,29 @@ router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
     }
     const classroomId = classroomRows[0].id;
 
+    const sanitizedPages = normalizeToPages(questions);
+    const payloadQuestions = { pages: sanitizedPages };
+
     const insertSql = `
       INSERT INTO quizzes (classroom_id, teacher_id, title, questions, attempts_allowed, start_time, end_time, time_limit_seconds, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `;
-    const qJson = JSON.stringify(questions || []);
 
     await queryAsync(insertSql, [
       classroomId,
       teacherId,
-      title || "Untitled Quiz",
-      qJson,
-      attemptsAllowed,
-      startTime,
-      endTime,
-      timeLimitSeconds,
+      (String(title || "").trim() || "Untitled Quiz").slice(0, 255),
+      JSON.stringify(payloadQuestions),
+      attempts,
+      startTime || null,
+      endTime || null,
+      tls,
     ]);
 
-    res.json({ success: true, message: "Quiz created" });
+    const idRow = await queryAsync("SELECT LAST_INSERT_ID() as id");
+    const quizId = idRow[0]?.id || null;
+
+    res.json({ success: true, message: "Quiz created", quizId });
   } catch (err) {
     console.error("Error creating quiz:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -73,6 +172,45 @@ router.get("/:code/quizzes", verifyToken, async (req, res) => {
   }
 });
 
+// helper: parse questions JSON safely
+const parseQuestions = (raw) => {
+  try {
+    return typeof raw === "string" ? JSON.parse(raw || "[]") : raw;
+  } catch {
+    return [];
+  }
+};
+
+// helper: flatten for scoring only
+const flatQuestions = (raw) => {
+  const q = parseQuestions(raw);
+  if (q && Array.isArray(q.pages)) {
+    return q.pages.flatMap((pg) => pg?.questions || []);
+  }
+  return Array.isArray(q) ? q : [];
+};
+
+// helper: redact answers but keep structure
+const redactAnswersDeep = (raw) => {
+  const q = parseQuestions(raw);
+  const strip = (qq) => {
+    const { correctAnswer, answer, ...rest } = qq || {};
+    // keep options/type/text/etc
+    return rest;
+  };
+  if (q && Array.isArray(q.pages)) {
+    return {
+      pages: q.pages.map((pg) => ({
+        id: pg.id,
+        title: pg.title,
+        questions: (pg.questions || []).map(strip),
+      })),
+    };
+  }
+  if (Array.isArray(q)) return q.map(strip);
+  return q;
+};
+
 router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
   const { code, quizId } = req.params;
   const userId = req.user.id;
@@ -86,12 +224,17 @@ router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
        WHERE c.code = ? AND q.id = ? LIMIT 1`,
       [code, quizId]
     );
-    if (!rows.length)
+    if (!rows.length) {
       return res
         .status(404)
         .json({ success: false, message: "Quiz not found" });
+    }
 
     const quiz = rows[0];
+    const rawQuestions = parseQuestions(quiz.questions);
+
+    const isOwnerTeacher = userRole === "teacher" && userId === quiz.teacher_id;
+
     const quizObj = {
       id: quiz.id,
       title: quiz.title,
@@ -100,18 +243,10 @@ router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
       time_limit_seconds: quiz.time_limit_seconds,
       attempts_allowed: quiz.attempts_allowed,
       created_at: quiz.created_at,
-      questions: JSON.parse(quiz.questions || "[]"),
+      questions: isOwnerTeacher
+        ? rawQuestions
+        : redactAnswersDeep(rawQuestions),
     };
-
-    if (userRole !== "teacher" || userId !== quiz.teacher_id) {
-      // hide answers for students
-      quizObj.questions = quizObj.questions.map((q) => {
-        const { answer, correctAnswer, ...rest } = q;
-        const copy = { ...rest };
-        if (q.options) copy.options = q.options;
-        return copy;
-      });
-    }
 
     res.json({ success: true, quiz: quizObj });
   } catch (err) {
