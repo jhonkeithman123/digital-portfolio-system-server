@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Oct 30, 2025 at 04:38 AM
+-- Generation Time: Oct 31, 2025 at 11:05 AM
 -- Server version: 10.4.28-MariaDB
 -- PHP Version: 8.2.4
 
@@ -130,16 +130,24 @@ INSERT INTO `notifications` (`id`, `recipient_id`, `sender_id`, `type`, `message
 CREATE TABLE `quizzes` (
   `id` int(11) UNSIGNED NOT NULL,
   `classroom_id` int(11) NOT NULL,
+  `teacher_id` int(10) UNSIGNED NOT NULL,
   `title` varchar(255) NOT NULL,
-  `description` text NOT NULL,
   `questions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`questions`)),
-  `attempts` int(10) UNSIGNED NOT NULL,
+  `attempts` int(10) UNSIGNED NOT NULL DEFAULT 0,
   `attempts_allowed` int(10) UNSIGNED DEFAULT NULL,
   `start_time` datetime DEFAULT NULL,
   `end_time` datetime DEFAULT NULL,
   `time_limit_seconds` int(11) UNSIGNED DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `quizzes`
+--
+
+INSERT INTO `quizzes` (`id`, `classroom_id`, `teacher_id`, `title`, `questions`, `attempts`, `attempts_allowed`, `start_time`, `end_time`, `time_limit_seconds`, `created_at`) VALUES
+(3, 5, 4, 'Sample Quiz', '{\"pages\":[{\"id\":\"page-1\",\"title\":\"Page 1\",\"questions\":[{\"id\":\"q-8wxh30d\",\"type\":\"multiple_choice\",\"text\":\"Sample Question 1\",\"options\":[\"1\",\"2\",\"3\",\"4\"],\"correctAnswer\":\"0\"}]},{\"id\":\"page-2\",\"title\":\"Page 2\",\"questions\":[{\"id\":\"q-iy3ml4x\",\"type\":\"short_answer\",\"text\":\"Sample Question 2\",\"sentenceLimit\":3,\"correctAnswer\":\"\"}]},{\"id\":\"page-3\",\"title\":\"Page 3\",\"questions\":[{\"id\":\"q-487ismk\",\"type\":\"paragraph\",\"text\":\"Sample Question 3\",\"sentenceLimit\":4,\"correctAnswer\":\"\"}]},{\"id\":\"page-4\",\"title\":\"Page 4\",\"questions\":[{\"id\":\"q-bui692b\",\"type\":\"checkboxes\",\"text\":\"Sample Question 4\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[0,1,2,3]}]}]}', 0, 2, NULL, NULL, 3600, '2025-10-31 08:57:06'),
+(4, 5, 4, 'Sample Quiz 2', '{\"pages\":[{\"id\":\"page-13\",\"title\":\"Page 1\",\"questions\":[{\"id\":\"q-yvz4xof\",\"type\":\"multiple_choice\",\"text\":\"Sample Quiz 2\",\"options\":[\"1\",\"2\",\"3\",\"4\"],\"correctAnswer\":null}]},{\"id\":\"page-14\",\"title\":\"Page 2\",\"questions\":[{\"id\":\"q-bcartiv\",\"type\":\"short_answer\",\"text\":\"Sample Quiz 1\",\"sentenceLimit\":3,\"correctAnswer\":\"none\"}]},{\"id\":\"page-15\",\"title\":\"Page 3\",\"questions\":[{\"id\":\"q-3jpvxty\",\"type\":\"paragraph\",\"text\":\"Sample Quiz 3\",\"sentenceLimit\":7,\"correctAnswer\":\"lol\"}]},{\"id\":\"page-16\",\"title\":\"Page 4\",\"questions\":[{\"id\":\"q-hsmejil\",\"type\":\"checkboxes\",\"text\":\"Sample Quiz 4\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[0,1,2,3]}]}]}', 0, 1, NULL, NULL, NULL, '2025-10-31 08:59:22');
 
 -- --------------------------------------------------------
 
@@ -279,7 +287,21 @@ INSERT INTO `session` (`id`, `user_id`, `token`, `expires_at`) VALUES
 (113, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE3NDMzMjksImV4cCI6MTc2MTc1MDUyOX0.bXNE4ZNZeMcdMyuhCirbL1-dYHWu3Gt7HHbdPx2qE-0', '2025-10-29 23:08:49'),
 (114, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE3NDMzNzUsImV4cCI6MTc2MTc1MDU3NX0.6MlddJmuJ9s9Szxuq9roxyU7XTctuJZXQOL8h9Uyzss', '2025-10-29 23:09:35'),
 (115, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE3NDM0NDksImV4cCI6MTc2MTc1MDY0OX0.oKc4f_gsSq-UAULlTn_KeGsDVXxUvbenB4K7Dg30Pbk', '2025-10-29 23:10:49'),
-(116, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE3OTEzNzEsImV4cCI6MTc2MTc5ODU3MX0.xmsoRvyVi-o1LWk_-9r4LksRlTh_kzmEgByHXxHQBOw', '2025-10-30 12:29:31');
+(116, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE3OTEzNzEsImV4cCI6MTc2MTc5ODU3MX0.xmsoRvyVi-o1LWk_-9r4LksRlTh_kzmEgByHXxHQBOw', '2025-10-30 12:29:31'),
+(117, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDU5ODgsImV4cCI6MTc2MTgxMzE4OH0.x2g5FpU4PMT9T4p7rUcmQoNqUBPQrklGj2LW-goUykI', '2025-10-30 16:33:08'),
+(118, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDc0MDIsImV4cCI6MTc2MTgxNDYwMn0.LbXu5w1QhFmSGEb6q7voCj9sWKhgqFAaKJ-Zq9HNUCg', '2025-10-30 16:56:42'),
+(119, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDc0MzMsImV4cCI6MTc2MTgxNDYzM30.k6uPJzdkJH9kvYXkjNN3gEtv9mq9w64qMsLtaz83WXU', '2025-10-30 16:57:13'),
+(120, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDc0NjEsImV4cCI6MTc2MTgxNDY2MX0.-U0ng-HJkL-AVOGV8bKDraNqcpjM9WasMg8i2qrzIYw', '2025-10-30 16:57:41'),
+(121, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDc1MzIsImV4cCI6MTc2MTgxNDczMn0.2gm1U8O_lnrt4pEZEBq0K0lIbCjBeZeBc9pQGRnn7KU', '2025-10-30 16:58:52'),
+(122, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDc3MDAsImV4cCI6MTc2MTgxNDkwMH0._3EVAXJAqv99wFY6_lYkvHZWfsG5kzIExcENJgI9FPo', '2025-10-30 17:01:40'),
+(123, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDc4MjYsImV4cCI6MTc2MTgxNTAyNn0.Hb_iD1VGI2ybWGRmUGwwxJHL6pabfADrdJZYMr-mWJw', '2025-10-30 17:03:46'),
+(124, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgwMjcsImV4cCI6MTc2MTgxNTIyN30.qnew2XsVbD0_wOj9rhTxIWkKPMlOI_jfhnVgoMezh7c', '2025-10-30 17:07:07'),
+(125, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgwNTcsImV4cCI6MTc2MTgxNTI1N30.kwP1Zm4_FQqMQT7t6AR_N3Z3_6YAkzMWJuLs50dOL7A', '2025-10-30 17:07:37'),
+(126, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgwNjMsImV4cCI6MTc2MTgxNTI2M30.kCvwt5kmMlyS3kgBXcwpFcSg7AwRj3Rb1uRdu8BprWc', '2025-10-30 17:07:43'),
+(127, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgwOTIsImV4cCI6MTc2MTgxNTI5Mn0.Kx8OkFGdiSMDPm9mqRvzQIzHXt7009uB0zWDD9ayTd4', '2025-10-30 17:08:12'),
+(128, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgzODIsImV4cCI6MTc2MTgxNTU4Mn0.S0pcPC--aReGcIk-ZcEuKey4325-ZOHW3KzxQgloIq8', '2025-10-30 17:13:02'),
+(129, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4OTU1MTQsImV4cCI6MTc2MTkwMjcxNH0.NYeSfhNMvYLhJntbmvD5Dhhzv0PLdOz9EssEPbJP9ow', '2025-10-31 17:25:14'),
+(130, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE5MDI3MjcsImV4cCI6MTc2MTkwOTkyN30.vxclKpZvCyrSSwp4h-PFRKx5zuZE5U3kbrAhIbb37Is', '2025-10-31 19:25:27');
 
 -- --------------------------------------------------------
 
@@ -436,7 +458,7 @@ ALTER TABLE `notifications`
 -- AUTO_INCREMENT for table `quizzes`
 --
 ALTER TABLE `quizzes`
-  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `quiz_attempts`
@@ -448,7 +470,7 @@ ALTER TABLE `quiz_attempts`
 -- AUTO_INCREMENT for table `session`
 --
 ALTER TABLE `session`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=117;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=131;
 
 --
 -- AUTO_INCREMENT for table `submissions`
