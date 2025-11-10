@@ -109,6 +109,17 @@ router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
     const raw = { pages };
     const questions = isOwner ? raw : redactAnswersDeep(raw);
 
+    // compute how many attempts this user has already used for this quiz
+    const arows = await queryAsync(
+      "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
+      [qz.id, userId]
+    );
+    const attempts_used = arows[0]?.cnt || 0;
+    const attempts_remaining =
+      qz.attempts_allowed != null
+        ? Math.max(0, qz.attempts_allowed - attempts_used)
+        : null;
+
     res.json({
       success: true,
       quiz: {
@@ -118,6 +129,8 @@ router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
         end_time: qz.end_time,
         time_limit_seconds: qz.time_limit_seconds,
         attempts_allowed: qz.attempts_allowed,
+        attempts_used,
+        attempts_remaining,
         created_at: qz.created_at,
         questions,
       },
@@ -483,7 +496,7 @@ router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
 
   try {
     const rows = await queryAsync(
-      `SELECT q.*, c.id as classroom_id
+      `SELECT q.*, c.id as classroom_id, c.teacher_id
        FROM quizzes q
        JOIN classrooms c ON q.classroom_id = c.id
        WHERE c.code = ? AND q.id = ? LIMIT 1`,
@@ -495,32 +508,20 @@ router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
         .json({ success: false, message: "Quiz not found" });
 
     const quiz = rows[0];
-    const now = new Date();
 
-    if (quiz.start_time && new Date(quiz.start_time) > now) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Quiz has not started yet" });
-    }
-    if (quiz.end_time && new Date(quiz.end_time) < now) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Quiz has already ended" });
-    }
-
-    const attempts = await queryAsync(
+    // check attempts used
+    const arows = await queryAsync(
       "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
       [quizId, studentId]
     );
-    const used = attempts[0]?.cnt || 0;
-    const nextAttemptNo = used + 1;
-
+    const used = arows[0]?.cnt || 0;
     if (quiz.attempts_allowed != null && used >= quiz.attempts_allowed) {
       return res
         .status(400)
         .json({ success: false, message: "No attempts remaining" });
     }
 
+    const nextAttemptNo = used + 1;
     const startedAt = new Date();
     let expiresAt = null;
     if (quiz.time_limit_seconds) {
@@ -529,25 +530,25 @@ router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
       );
     }
 
-    const insertSql = `
-      INSERT INTO quiz_attempts (quiz_id, student_id, attempt_no, answers, score, status, started_at, submitted_at, expires_at)
-      VALUES (?, ?, ?, ?, NULL, 'in_progress', ?, NULL, ?)
-    `;
-    await queryAsync(insertSql, [
-      quizId,
-      studentId,
-      nextAttemptNo, // <- tracked attempt number
-      JSON.stringify({}),
-      startedAt,
-      expiresAt,
-    ]);
+    await queryAsync(
+      `INSERT INTO quiz_attempts (quiz_id, student_id, attempt_no, answers, score, status, started_at, submitted_at, expires_at)
+       VALUES (?, ?, ?, ?, NULL, 'in_progress', ?, NULL, ?)`,
+      [
+        quizId,
+        studentId,
+        nextAttemptNo,
+        JSON.stringify({}),
+        startedAt,
+        expiresAt,
+      ]
+    );
 
     const idRow = await queryAsync("SELECT LAST_INSERT_ID() as id");
     const attemptId = idRow[0]?.id || null;
 
     res.json({ success: true, attemptId, attemptNo: nextAttemptNo, expiresAt });
   } catch (err) {
-    console.error("Error starting quiz attempt:", err);
+    console.error("Error starting attempt:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -555,51 +556,28 @@ router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
 router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
   const { code, quizId } = req.params;
   const studentId = req.user.id;
-  const { attemptId, answers } = req.body; // answers: { questionId: selectedOption, ... }
+  const { attemptId, answers } = req.body;
 
   try {
-    const quizRows = await queryAsync(
-      `SELECT q.*, c.id as classroom_id
-       FROM quizzes q
-       JOIN classrooms c ON q.classroom_id = c.id
-       WHERE c.code = ? AND q.id = ? LIMIT 1`,
-      [code, quizId]
-    );
-    if (!quizRows.length)
-      return res
-        .status(404)
-        .json({ success: false, message: "Quiz not found" });
-
-    const quiz = quizRows[0];
-
-    const attemptRows = await queryAsync(
+    // verify attempt belongs to student
+    const art = await queryAsync(
       "SELECT * FROM quiz_attempts WHERE id = ? AND quiz_id = ? AND student_id = ? LIMIT 1",
       [attemptId, quizId, studentId]
     );
-    if (!attemptRows.length)
+    if (!art.length)
       return res
         .status(404)
         .json({ success: false, message: "Attempt not found" });
 
-    const attempt = attemptRows[0];
-    if (attempt.status === "completed") {
+    const attempt = art[0];
+    if (attempt.status === "completed")
       return res
         .status(400)
         .json({ success: false, message: "Attempt already submitted" });
-    }
-    if (attempt.expires_at && new Date(attempt.expires_at) < new Date()) {
-      await queryAsync(
-        "UPDATE quiz_attempts SET status = 'expired' WHERE id = ?",
-        [attemptId]
-      );
-      return res
-        .status(400)
-        .json({ success: false, message: "Attempt expired" });
-    }
 
-    // load pages and flatten questions for scoring
-    const pages = await loadPages(quiz.id);
-    const qlist = pages.flatMap((pg) => pg.questions || []);
+    // load flattened questions to score (use existing loadPages)
+    const pages = await loadPages(quizId);
+    const qlist = pages.flatMap((p) => p.questions || []);
 
     let score = 0;
     let maxScore = 0;
@@ -610,10 +588,10 @@ router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
       maxScore += 1;
       const given = answers?.[q.id] ?? null;
       if (Array.isArray(correct)) {
-        const givenArr = Array.isArray(given) ? given : [];
+        const givenArr = Array.isArray(given) ? given.map(String) : [];
         const equal =
           correct.length === givenArr.length &&
-          correct.every((v) => givenArr.includes(v));
+          correct.every((v) => givenArr.includes(String(v)));
         if (equal) score += 1;
       } else {
         if (String(given) === String(correct)) score += 1;
@@ -629,7 +607,7 @@ router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
 
     res.json({ success: true, score: percent });
   } catch (err) {
-    console.error("Error submitting quiz attempt:", err);
+    console.error("Error submitting attempt:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
