@@ -1,9 +1,11 @@
 import express from "express";
+import dotenv from "dotenv";
 
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
 import generateCode from "../config/code_generator.js";
 
+dotenv.config();
 const router = express.Router();
 
 //* Checks if the student is already in the classroom
@@ -62,7 +64,11 @@ router.get("/teacher", verifyToken, async (req, res) => {
       [teacherId]
     );
 
-    console.log("Teacher has advisory class, going through");
+    // avoid noisy terminal output in production — only log in development
+    if (process.env.NODE_ENV === "development") {
+      console.debug("Teacher has advisory class, going through");
+      console.table(result);
+    }
 
     res.json({
       success: true,
@@ -71,8 +77,6 @@ router.get("/teacher", verifyToken, async (req, res) => {
       code: result[0]?.code || null,
       name: result[0]?.name || null,
     });
-
-    console.table(result);
   } catch (err) {
     console.error("Error checking teacher status:", err.message);
     return res.status(500).json({ error: "Internal server error" });

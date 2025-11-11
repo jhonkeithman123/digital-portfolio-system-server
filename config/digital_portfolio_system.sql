@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Oct 31, 2025 at 11:05 AM
+-- Generation Time: Nov 10, 2025 at 02:17 PM
 -- Server version: 10.4.28-MariaDB
 -- PHP Version: 8.2.4
 
@@ -168,6 +168,15 @@ CREATE TABLE `quiz_attempts` (
   `expires_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `quiz_attempts`
+--
+
+INSERT INTO `quiz_attempts` (`id`, `quiz_id`, `student_id`, `attempt_no`, `answers`, `score`, `status`, `started_at`, `submitted_at`, `expires_at`) VALUES
+(3, 3, 3, 1, '{}', NULL, 'in_progress', '2025-11-08 20:45:39', NULL, '2025-11-08 21:45:39'),
+(4, 4, 3, 1, '{}', NULL, 'in_progress', '2025-11-08 20:45:48', NULL, NULL),
+(5, 3, 3, 2, '{}', NULL, 'in_progress', '2025-11-08 20:45:59', NULL, '2025-11-08 21:45:59');
+
 -- --------------------------------------------------------
 
 --
@@ -301,7 +310,14 @@ INSERT INTO `session` (`id`, `user_id`, `token`, `expires_at`) VALUES
 (127, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgwOTIsImV4cCI6MTc2MTgxNTI5Mn0.Kx8OkFGdiSMDPm9mqRvzQIzHXt7009uB0zWDD9ayTd4', '2025-10-30 17:08:12'),
 (128, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4MDgzODIsImV4cCI6MTc2MTgxNTU4Mn0.S0pcPC--aReGcIk-ZcEuKey4325-ZOHW3KzxQgloIq8', '2025-10-30 17:13:02'),
 (129, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE4OTU1MTQsImV4cCI6MTc2MTkwMjcxNH0.NYeSfhNMvYLhJntbmvD5Dhhzv0PLdOz9EssEPbJP9ow', '2025-10-31 17:25:14'),
-(130, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE5MDI3MjcsImV4cCI6MTc2MTkwOTkyN30.vxclKpZvCyrSSwp4h-PFRKx5zuZE5U3kbrAhIbb37Is', '2025-10-31 19:25:27');
+(130, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjE5MDI3MjcsImV4cCI6MTc2MTkwOTkyN30.vxclKpZvCyrSSwp4h-PFRKx5zuZE5U3kbrAhIbb37Is', '2025-10-31 19:25:27'),
+(131, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI2MDA1ODQsImV4cCI6MTc2MjYwNzc4NH0.zhD5O0etIM8xtgqDDlYTSLkMOIf7hLZnBECUGTRFYf8', '2025-11-08 21:16:24'),
+(132, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI2MDA5MjMsImV4cCI6MTc2MjYwODEyM30.oBrFfGX_hUOgOsyduUIeS6gdLclmL-q2guw93sWO_QQ', '2025-11-08 21:22:03'),
+(133, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI2MDA5MzgsImV4cCI6MTc2MjYwODEzOH0.92FXDwa1D11aS7XDB-ydnzCup6CIuc9JMitOJmf-wp0', '2025-11-08 21:22:18'),
+(134, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI2MDEwMjgsImV4cCI6MTc2MjYwODIyOH0.ZmL9I044pURXsaiPe4ewJRGm-xmR5nL4wzXjj_0Gbrk', '2025-11-08 21:23:48'),
+(135, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI3Nzg2NDgsImV4cCI6MTc2Mjc4NTg0OH0.WyMCR0ee77jtMDWz2e5LGYLM8Cz4d_UGAo_jkYeaI48', '2025-11-10 22:44:08'),
+(136, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI3NzkyOTQsImV4cCI6MTc2Mjc4NjQ5NH0.6B--_8YtgLR9nXHznU-LM2w_CTTKig9pCQh73qnzMpw', '2025-11-10 22:54:54'),
+(137, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI3ODAyODUsImV4cCI6MTc2Mjc4NzQ4NX0.2U3bVALkT5a7e7XsJAVU_6ehXEsbCHkia7WZECoo7iY', '2025-11-10 23:11:25');
 
 -- --------------------------------------------------------
 
@@ -464,13 +480,13 @@ ALTER TABLE `quizzes`
 -- AUTO_INCREMENT for table `quiz_attempts`
 --
 ALTER TABLE `quiz_attempts`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `session`
 --
 ALTER TABLE `session`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=131;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=138;
 
 --
 -- AUTO_INCREMENT for table `submissions`

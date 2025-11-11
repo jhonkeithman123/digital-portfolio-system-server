@@ -220,7 +220,7 @@ router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
   };
 
   const normalizeToPages = (qs) => {
-    // If already { pages }, sanitize each page; otherwise wrap array into a single page
+    // If already { pages: [...] }, sanitize each page
     if (qs && Array.isArray(qs.pages)) {
       return qs.pages.map((pg, pIdx) => ({
         id: pg?.id || makePageId(pIdx),
@@ -230,6 +230,19 @@ router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
           : [],
       }));
     }
+
+    // If client passed an array-of-pages (each element has .questions), treat as pages
+    if (Array.isArray(qs) && qs.length > 0 && Array.isArray(qs[0]?.questions)) {
+      return qs.map((pg, pIdx) => ({
+        id: pg?.id || makePageId(pIdx),
+        title: String(pg?.title ?? `Page ${pIdx + 1}`),
+        questions: Array.isArray(pg?.questions)
+          ? pg.questions.map((q, qIdx) => sanitizeQuestion(q, pIdx, qIdx))
+          : [],
+      }));
+    }
+
+    // Otherwise assume a flat array of questions -> wrap into a single page
     const arr = Array.isArray(qs) ? qs : [];
     return [
       {
@@ -612,46 +625,164 @@ router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
   }
 });
 
+// GET attempts for a quiz (teacher-only). ?status=needs_grading|completed|in_progress|all
 router.get("/:code/quizzes/:quizId/attempts", verifyToken, async (req, res) => {
   const { code, quizId } = req.params;
-  const userId = req.user.id;
+  const { status = "needs_grading" } = req.query; // default to needs_grading
+  const requesterId = req.user.id;
+  const role = req.user.role;
 
   try {
-    const quizRows = await queryAsync(
-      `SELECT q.*, c.id as classroom_id
+    // ensure the quiz exists and belongs to this teacher (or allow teacher access)
+    const qrows = await queryAsync(
+      `SELECT q.*, c.teacher_id
        FROM quizzes q
        JOIN classrooms c ON q.classroom_id = c.id
        WHERE c.code = ? AND q.id = ? LIMIT 1`,
       [code, quizId]
     );
-    if (!quizRows.length)
+    if (!qrows.length)
       return res
         .status(404)
         .json({ success: false, message: "Quiz not found" });
+    const quiz = qrows[0];
 
-    const quiz = quizRows[0];
-    if (quiz.teacher_id !== userId) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Not authorized" });
+    if (role !== "teacher" || quiz.teacher_id !== requesterId) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    const attempts = await queryAsync(
-      `SELECT a.id, a.student_id, u.username as studentName, a.attempt_no as attemptNo,
-              a.score, a.status, a.started_at, a.submitted_at, a.expires_at
-       FROM quiz_attempts a
-       LEFT JOIN users u ON a.student_id = u.id
-       WHERE a.quiz_id = ?
-       ORDER BY a.student_id, a.attempt_no`,
-      [quizId]
-    );
+    const allowedStatuses = [
+      "needs_grading",
+      "completed",
+      "in_progress",
+      "all",
+    ];
+    const st = allowedStatuses.includes(status) ? status : "needs_grading";
 
-    res.json({ success: true, attempts });
+    let whereClause = "1=1";
+    const params = [quizId];
+    if (st !== "all") {
+      whereClause = "qa.status = ?";
+      params.unshift(st); // will be processed below in query construction
+      // but easier: we'll build query differently
+    }
+
+    // build query
+    let sql = `
+      SELECT qa.*, u.id as student_id, u.username as student_username, u.username as student_name
+      FROM quiz_attempts qa
+      JOIN users u ON u.id = qa.student_id
+      WHERE qa.quiz_id = ?
+    `;
+    const sqlParams = [quizId];
+    if (st !== "all") {
+      sql += " AND qa.status = ?";
+      sqlParams.push(st);
+    }
+    sql += " ORDER BY qa.id DESC LIMIT 200";
+
+    const attempts = await queryAsync(sql, sqlParams);
+
+    // parse JSON fields safely
+    const out = attempts.map((a) => ({
+      id: a.id,
+      quiz_id: a.quiz_id,
+      student_id: a.student_id,
+      student_name: a.student_name || a.student_username,
+      attempt_no: a.attempt_no,
+      status: a.status,
+      score: a.score,
+      answers: (() => {
+        try {
+          return JSON.parse(a.answers || "{}");
+        } catch {
+          return {};
+        }
+      })(),
+      started_at: a.started_at,
+      submitted_at: a.submitted_at,
+      expires_at: a.expires_at,
+      grading: (() => {
+        try {
+          return JSON.parse(a.grading || "{}");
+        } catch {
+          return {};
+        }
+      })(),
+    }));
+
+    res.json({ success: true, attempts: out });
   } catch (err) {
-    console.error("Error fetching quiz attempts:", err);
+    console.error("Error listing attempts:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
+// PATCH grade a specific attempt (teacher-only): { score: number (0-100), grading: object, comment: string }
+router.patch(
+  "/:code/quizzes/:quizId/attempts/:attemptId/grade",
+  verifyToken,
+  async (req, res) => {
+    const { code, quizId, attemptId } = req.params;
+    const { score, grading = {}, comment = "" } = req.body;
+    const requesterId = req.user.id;
+    const role = req.user.role;
+
+    try {
+      // verify quiz ownership
+      const qrows = await queryAsync(
+        `SELECT q.*, c.teacher_id
+       FROM quizzes q
+       JOIN classrooms c ON q.classroom_id = c.id
+       WHERE c.code = ? AND q.id = ? LIMIT 1`,
+        [code, quizId]
+      );
+      console.debug("[AttemptsRoute] code/quizId", code, quizId);
+      if (!qrows.length) {
+        console.debug("[AttemptsRoute] no quiz row for", { code, quizId });
+        return res
+          .status(404)
+          .json({ success: false, message: "Quiz not found" });
+      }
+      const quiz = qrows[0];
+      if (role !== "teacher" || quiz.teacher_id !== requesterId) {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+
+      // verify attempt exists
+      const arows = await queryAsync(
+        "SELECT * FROM quiz_attempts WHERE id = ? AND quiz_id = ? LIMIT 1",
+        [attemptId, quizId]
+      );
+      if (!arows.length)
+        return res
+          .status(404)
+          .json({ success: false, message: "Attempt not found" });
+
+      const now = new Date();
+
+      // update score, grading info, status to completed (teacher graded)
+      await queryAsync(
+        `UPDATE quiz_attempts
+       SET score = ?, status = 'completed', grading = ?, grader_id = ?, graded_at = ?, comment = ?
+       WHERE id = ?`,
+        [
+          Number(score) || 0,
+          JSON.stringify(grading || {}),
+          requesterId,
+          now,
+          String(comment || ""),
+          attemptId,
+        ]
+      );
+
+      res.json({ success: true, message: "Attempt graded" });
+    } catch (err) {
+      console.error("Error grading attempt:", err);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  }
+);
 
 // ----------------- end new routes -----------------
 
