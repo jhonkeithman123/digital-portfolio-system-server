@@ -76,6 +76,7 @@ router.get("/teacher", verifyToken, async (req, res) => {
       classroomId: result[0]?.id || null,
       code: result[0]?.code || null,
       name: result[0]?.name || null,
+      section: result[0]?.section ?? null,
     });
   } catch (err) {
     console.error("Error checking teacher status:", err.message);
@@ -107,6 +108,58 @@ router.post("/create", verifyToken, async (req, res) => {
   }
 });
 
+router.patch("/teacher/section", verifyToken, async (req, res) => {
+  const teacherId = req.user.id;
+  let { section, code } = req.body;
+  console.log("section from save classroom section: ", section);
+
+  if (!code) {
+    return res
+      .status(400)
+      .json({ success: false, error: "Missing classroom code" });
+  }
+
+  try {
+    const rows = await queryAsync(
+      "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
+      [code, teacherId]
+    );
+    if (!rows.length)
+      return res
+        .status(403)
+        .json({ success: false, error: "Not authorized for this classroom" });
+
+    if (typeof section === "string") {
+      section = section.trim();
+      if (section === "") section = null;
+    }
+
+    if (section !== null && typeof section != "string") {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid section type" });
+    }
+
+    await queryAsync(
+      "UPDATE classrooms SET section = ? WHERE code = ? AND teacher_id = ?",
+      [section, code, teacherId]
+    );
+
+    return res.json({
+      success: true,
+      message: section
+        ? "Classroom section updated"
+        : "Classroom section cleared",
+      section,
+    });
+  } catch (err) {
+    console.error("Error saving to datebase:", err);
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal server error" });
+  }
+});
+
 //* Get students not already invited/accepted for a classroom
 router.get("/:code/students", verifyToken, async (req, res) => {
   const { code } = req.params;
@@ -114,7 +167,7 @@ router.get("/:code/students", verifyToken, async (req, res) => {
 
   console.log("Fetching available students for classroom:", code);
 
-  const sql = `
+  let sql = `
     SELECT u.id, u.username AS name, u.email, u.role
     FROM users u
     WHERE u.role = 'student'
