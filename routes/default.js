@@ -54,7 +54,9 @@ router.post("/notifications/mark-all-read", verifyToken, async (req, res) => {
 
 // Batch mark selected IDs (owned by user) as read
 router.post("/notifications/read-batch", verifyToken, async (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Number.isInteger) : [];
+  const ids = Array.isArray(req.body?.ids)
+    ? req.body.ids.filter(Number.isInteger)
+    : [];
   if (!ids.length) return res.json({ success: true, updated: 0 });
   const placeholders = ids.map(() => "?").join(",");
   try {
@@ -64,6 +66,61 @@ router.post("/notifications/read-batch", verifyToken, async (req, res) => {
     res.json({ success: true, updated: result?.affectedRows || 0 });
   } catch (err) {
     console.error("read-batch error", err.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+router.get("/users/sections", verifyToken, async (req, res) => {
+  try {
+    const rows = await queryAsync(
+      "SELECT DISTINCT section FROM users WHERE role='student' AND section IS NOT NULL ORDER BY section"
+    );
+    res.json({ success: true, sections: rows.map((r) => r.section) });
+  } catch (e) {
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Students list (optionally only those missing section)
+router.get("/users/students", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+    const { missing } = req.query;
+    let sql =
+      "SELECT id, username, email, COALESCE(NULLIF(section,''), NULL) AS section FROM users WHERE role='student'";
+    const params = [];
+    if (missing === "1" || missing === "true") {
+      sql += " AND (section IS NULL OR section = '')";
+    }
+    sql += " ORDER BY username ASC";
+    const rows = await queryAsync(sql, params);
+    res.json({ success: true, students: rows });
+  } catch (e) {
+    console.error("GET /users/students error:", e.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Update a single student's section
+router.patch("/users/:id/section", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+    const id = parseInt(req.params.id, 10);
+    const section = (req.body?.section ?? "").toString().trim();
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ success: false, message: "Invalid user id" });
+    }
+    await queryAsync("UPDATE users SET section = ? WHERE id = ? AND role='student'", [
+      section || null,
+      id,
+    ]);
+    res.json({ success: true });
+  } catch (e) {
+    console.error("PATCH /users/:id/section error:", e.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });

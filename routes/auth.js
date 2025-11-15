@@ -1,12 +1,12 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
+import { setAuthCookie, clearAuthCookie } from "../utils/authCookies.js";
 
 import { verifyToken } from "../middleware/auth.js";
 import { sendVerificationEmail } from "../config/sendVerificationEmail.js";
 import {
   findOneUserBy,
-  findUsersBy,
   insertRecord,
   updateRecord,
 } from "../config/helpers/dbHelper.js";
@@ -16,6 +16,7 @@ import {
   generateVerificationCode,
   isVerificationCodeValid,
 } from "../config/helpers/verification.js";
+import { queryAsync } from "../config/helpers/dbHelper.js";
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ router.get("/session", verifyToken, async (req, res) => {
       "username",
       "email",
       "role",
+      "section",
     ]);
 
     if (!user) {
@@ -42,6 +44,53 @@ router.get("/session", verifyToken, async (req, res) => {
     console.error(err.message);
     res.status(500).json({ error: "Internal server error." });
   }
+});
+
+// Current user's profile (includes section)
+router.get("/me", verifyToken, async (req, res) => {
+  try {
+    const [user] = await queryAsync(
+      "SELECT id, username AS name, email, role, section FROM users WHERE id = ?",
+      [req.user.id]
+    );
+    if (!user)
+      return res.status(404).json({ success: false, message: "Not found" });
+    res.json({ success: true, user });
+  } catch (e) {
+    console.error("GET /auth/me error:", e.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+// Student can set their section ONLY if it is currently NULL/empty
+router.patch("/me/section", verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== "student") {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+    const section = (req.body?.section ?? "").toString().trim();
+    if (!section) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Section is required" });
+    }
+    // Update only when section is NULL or empty
+    const result = await queryAsync(
+      "UPDATE users SET section = ? WHERE id = ? AND role = 'student' AND (section IS NULL OR section = '')",
+      [section, req.user.id]
+    );
+    if (!result?.affectedRows) {
+      return res.json({ success: false, message: "Section already set" });
+    }
+    res.json({ success: true, section });
+  } catch (e) {
+    console.error("PATCH /auth/me/section error:", e.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+router.get("/ping", verifyToken, (req, res) => {
+  return res.json({ success: true, userId: req.user.id });
 });
 
 router.post("/login", async (req, res) => {
@@ -67,17 +116,18 @@ router.post("/login", async (req, res) => {
       { id: user.ID, role: user.role },
       "2h"
     );
-
     await createSession(user.ID, token, expiresAt);
+
+    setAuthCookie(res, token);
 
     res.json({
       success: true,
-      token,
       user: {
         id: user.ID,
         name: user.username,
         role: user.role,
         email: user.email,
+        section: user.section || null,
       },
     });
   } catch (error) {
@@ -86,26 +136,35 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// Logout: clear cookie (and let client clear local storage if it uses it)
+router.post("/logout", (req, res) => {
+  clearAuthCookie(res);
+  return res.json({ success: true });
+});
+
 router.post("/signup", async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, section } = req.body;
 
   const normedEmail = email.toLowerCase();
+  const sectionVal = section ? section.trim() : null;
 
   try {
-    const user = await findOneUserBy("email", normedEmail);
-    if (!user) return res.status(404).json({ error: "User not found." });
+    const existingEmail = await findOneUserBy("email", normedEmail);
+    if (existingEmail)
+      return res.status(409).json({ error: "Email already registered." });
 
-    const username = await findOneUserBy("username", name);
-    if (username > 0)
-      return res.status(405).json({ error: "Username already exists." });
+    const existingUsername = await findOneUserBy("username", name);
+    if (existingUsername)
+      return res.status(409).json({ error: "Username already exists." });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     await insertRecord("users", {
       username: name,
-      email,
+      email: normedEmail,
       password: hashedPassword,
       role,
+      section: sectionVal,
     });
 
     res.json({ success: true, message: "Successfully created user." });

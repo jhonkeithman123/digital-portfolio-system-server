@@ -1,23 +1,15 @@
 import jwt from "jsonwebtoken";
+import { extractToken } from "../utils/authCookies.js";
 
 export const verifyToken = (req, res, next) => {
-  const authHeader = req.headers.authorization || "";
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  // Treat undefined/null/empty as missing
-  const token =
-    bearer && bearer !== "undefined" && bearer !== "null" ? bearer : null;
-
+  const token = extractToken(req);
   if (!token) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("Missing or malformed token. Authorization:", authHeader);
-    }
     return res
       .status(401)
       .json({ success: false, message: "No token provided" });
   }
 
   if (!process.env.JWT_SECRET) {
-    console.error("JWT_SECRET is not set");
     return res
       .status(500)
       .json({ success: false, message: "Server misconfigured" });
@@ -25,12 +17,9 @@ export const verifyToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { id, ... }
+    req.user = decoded;
     next();
-  } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("Token verify failed:", err?.name || err?.message);
-    }
+  } catch {
     return res
       .status(401)
       .json({ success: false, message: "Invalid or expired token" });

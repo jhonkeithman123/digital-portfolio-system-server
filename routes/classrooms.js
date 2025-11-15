@@ -84,15 +84,21 @@ router.get("/teacher", verifyToken, async (req, res) => {
 });
 
 router.post("/create", verifyToken, async (req, res) => {
-  const { name, schoolYear } = req.body;
+  const { name, schoolYear, section } = req.body;
   const teacherId = req.user.id;
   const code = generateCode();
 
   const sql =
-    "INSERT INTO classrooms (name, school_year, teacher_id, code) VALUES (?, ?, ?, ?)";
+    "INSERT INTO classrooms (name, school_year, section, teacher_id, code) VALUES (?, ?, ?, ?, ?)";
 
   try {
-    const result = await queryAsync(sql, [name, schoolYear, teacherId, code]);
+    const result = await queryAsync(sql, [
+      name,
+      schoolYear,
+      section || null,
+      teacherId,
+      code,
+    ]);
     const classroomId = result.insertId || result.id || null;
     res.status(200).json({ success: true, classroomId, code });
   } catch (err) {
@@ -104,6 +110,7 @@ router.post("/create", verifyToken, async (req, res) => {
 //* Get students not already invited/accepted for a classroom
 router.get("/:code/students", verifyToken, async (req, res) => {
   const { code } = req.params;
+  const { section } = req.query;
 
   console.log("Fetching available students for classroom:", code);
 
@@ -120,8 +127,14 @@ router.get("/:code/students", verifyToken, async (req, res) => {
       )
   `;
 
+  const params = [code];
+  if (section && section !== "all") {
+    sql += " AND u.section = ?";
+    params.push(section);
+  }
+
   try {
-    const results = await queryAsync(sql, [code]);
+    const results = await queryAsync(sql, params);
     console.log(`Found ${results.length} available students`);
     res.status(200).json({ success: true, students: results });
   } catch (err) {

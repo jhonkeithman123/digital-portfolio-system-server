@@ -2,27 +2,50 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 
 import mainRoute from "./routes/default.js";
 import auth from "./routes/auth.js";
 import submission from "./routes/submissions.js";
 import security from "./routes/security.js";
 import classrooms from "./routes/classrooms.js";
-import activityquizes from "./routes/activity&quizes.js";
+import quizzes from "./routes/quizzes.js";
+import activities from "./routes/activities.js";
 
 dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.set("trust proxy", 1);
+
 app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+  cors({
+    origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+    credentials: true,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+app.use(express.json());
+app.use(cookieParser());
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+          process.env.CLIENT_ORIGIN || "http://localhost:3000",
+        ],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+      },
     },
-    reportOnly: false,
+    referrerPolicy: { policy: "no-referrer" },
+    crossOriginEmbedderPolicy: false,
   })
 );
 
@@ -31,7 +54,8 @@ app.use("/auth", auth);
 app.use("/api", submission);
 app.use("/security", security);
 app.use("/classrooms", classrooms);
-app.use("/quizes", activityquizes);
+app.use("/quizzes", quizzes);
+app.use("/activity", activities);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`server running on port ${PORT}`));
