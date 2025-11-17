@@ -17,7 +17,8 @@ router.get("/student", verifyToken, async (req, res) => {
       cm.classroom_id,
       cm.status,
       c.code,
-      c.name
+      c.name,
+      c.section
     FROM classroom_members cm
     JOIN classrooms c ON cm.classroom_id = c.id
     WHERE cm.student_id = ?
