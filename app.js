@@ -17,9 +17,11 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1);
 
+const client_url = process.env.CLIENT_ORIGIN || "ttp://localhost:3001";
+
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+    origin: client_url,
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -36,10 +38,7 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        connectSrc: [
-          "'self'",
-          process.env.CLIENT_ORIGIN || "http://localhost:3000",
-        ],
+        connectSrc: ["'self'", client_url],
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
       },
