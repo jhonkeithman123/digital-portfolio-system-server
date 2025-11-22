@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Nov 10, 2025 at 02:17 PM
+-- Generation Time: Nov 21, 2025 at 01:31 PM
 -- Server version: 10.4.28-MariaDB
 -- PHP Version: 8.2.4
 
@@ -30,6 +30,7 @@ SET time_zone = "+00:00";
 CREATE TABLE `classrooms` (
   `id` int(11) NOT NULL,
   `name` varchar(100) NOT NULL,
+  `section` varchar(64) DEFAULT NULL,
   `code` varchar(10) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -41,8 +42,8 @@ CREATE TABLE `classrooms` (
 -- Dumping data for table `classrooms`
 --
 
-INSERT INTO `classrooms` (`id`, `name`, `code`, `teacher_id`, `created_at`, `school_year`, `updated_at`) VALUES
-(5, 'Advisory', 'mUq0oFzlui', 4, '2025-10-07 10:42:43', '2025-2026', '0000-00-00 00:00:00');
+INSERT INTO `classrooms` (`id`, `name`, `section`, `code`, `teacher_id`, `created_at`, `school_year`, `updated_at`) VALUES
+(5, 'Advisory', 'DIT 1-5', 'mUq0oFzlui', 4, '2025-11-15 14:26:04', '2025-2026', '0000-00-00 00:00:00');
 
 -- --------------------------------------------------------
 
@@ -117,9 +118,9 @@ CREATE TABLE `notifications` (
 --
 
 INSERT INTO `notifications` (`id`, `recipient_id`, `sender_id`, `type`, `message`, `link`, `is_read`, `created_at`) VALUES
-(1, 3, 4, 'invite', 'You\'ve been invited to join classroom mUq0oFzlui', '/classrooms/mUq0oFzlui', 0, '2025-10-22 14:17:31'),
-(2, 3, 4, 'invite', 'You\'ve been invited to join classroom mUq0oFzlui', '/classrooms/mUq0oFzlui', 0, '2025-10-22 14:18:36'),
-(3, 3, 4, 'invite', 'You\'ve been invited to join classroom mUq0oFzlui', '/classrooms/mUq0oFzlui', 0, '2025-10-24 22:12:29');
+(1, 3, 4, 'invite', 'You\'ve been invited to join classroom mUq0oFzlui', '/classrooms/mUq0oFzlui', 1, '2025-10-22 14:17:31'),
+(2, 3, 4, 'invite', 'You\'ve been invited to join classroom mUq0oFzlui', '/classrooms/mUq0oFzlui', 1, '2025-10-22 14:18:36'),
+(3, 3, 4, 'invite', 'You\'ve been invited to join classroom mUq0oFzlui', '/classrooms/mUq0oFzlui', 1, '2025-10-24 22:12:29');
 
 -- --------------------------------------------------------
 
@@ -141,14 +142,6 @@ CREATE TABLE `quizzes` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `quizzes`
---
-
-INSERT INTO `quizzes` (`id`, `classroom_id`, `teacher_id`, `title`, `questions`, `attempts`, `attempts_allowed`, `start_time`, `end_time`, `time_limit_seconds`, `created_at`) VALUES
-(3, 5, 4, 'Sample Quiz', '{\"pages\":[{\"id\":\"page-1\",\"title\":\"Page 1\",\"questions\":[{\"id\":\"q-8wxh30d\",\"type\":\"multiple_choice\",\"text\":\"Sample Question 1\",\"options\":[\"1\",\"2\",\"3\",\"4\"],\"correctAnswer\":\"0\"}]},{\"id\":\"page-2\",\"title\":\"Page 2\",\"questions\":[{\"id\":\"q-iy3ml4x\",\"type\":\"short_answer\",\"text\":\"Sample Question 2\",\"sentenceLimit\":3,\"correctAnswer\":\"\"}]},{\"id\":\"page-3\",\"title\":\"Page 3\",\"questions\":[{\"id\":\"q-487ismk\",\"type\":\"paragraph\",\"text\":\"Sample Question 3\",\"sentenceLimit\":4,\"correctAnswer\":\"\"}]},{\"id\":\"page-4\",\"title\":\"Page 4\",\"questions\":[{\"id\":\"q-bui692b\",\"type\":\"checkboxes\",\"text\":\"Sample Question 4\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[0,1,2,3]}]}]}', 0, 2, NULL, NULL, 3600, '2025-10-31 08:57:06'),
-(4, 5, 4, 'Sample Quiz 2', '{\"pages\":[{\"id\":\"page-13\",\"title\":\"Page 1\",\"questions\":[{\"id\":\"q-yvz4xof\",\"type\":\"multiple_choice\",\"text\":\"Sample Quiz 2\",\"options\":[\"1\",\"2\",\"3\",\"4\"],\"correctAnswer\":null}]},{\"id\":\"page-14\",\"title\":\"Page 2\",\"questions\":[{\"id\":\"q-bcartiv\",\"type\":\"short_answer\",\"text\":\"Sample Quiz 1\",\"sentenceLimit\":3,\"correctAnswer\":\"none\"}]},{\"id\":\"page-15\",\"title\":\"Page 3\",\"questions\":[{\"id\":\"q-3jpvxty\",\"type\":\"paragraph\",\"text\":\"Sample Quiz 3\",\"sentenceLimit\":7,\"correctAnswer\":\"lol\"}]},{\"id\":\"page-16\",\"title\":\"Page 4\",\"questions\":[{\"id\":\"q-hsmejil\",\"type\":\"checkboxes\",\"text\":\"Sample Quiz 4\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[0,1,2,3]}]}]}', 0, 1, NULL, NULL, NULL, '2025-10-31 08:59:22');
-
 -- --------------------------------------------------------
 
 --
@@ -162,20 +155,15 @@ CREATE TABLE `quiz_attempts` (
   `attempt_no` int(10) UNSIGNED NOT NULL,
   `answers` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`answers`)),
   `score` int(11) DEFAULT NULL,
+  `grading` varchar(255) DEFAULT NULL,
+  `comment` varchar(255) DEFAULT NULL,
+  `graded_at` timestamp NULL DEFAULT NULL,
+  `grader_id` int(11) DEFAULT NULL,
   `status` enum('in_progress','completed','expired') NOT NULL DEFAULT 'in_progress',
   `started_at` datetime NOT NULL,
   `submitted_at` datetime DEFAULT NULL,
   `expires_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `quiz_attempts`
---
-
-INSERT INTO `quiz_attempts` (`id`, `quiz_id`, `student_id`, `attempt_no`, `answers`, `score`, `status`, `started_at`, `submitted_at`, `expires_at`) VALUES
-(3, 3, 3, 1, '{}', NULL, 'in_progress', '2025-11-08 20:45:39', NULL, '2025-11-08 21:45:39'),
-(4, 4, 3, 1, '{}', NULL, 'in_progress', '2025-11-08 20:45:48', NULL, NULL),
-(5, 3, 3, 2, '{}', NULL, 'in_progress', '2025-11-08 20:45:59', NULL, '2025-11-08 21:45:59');
 
 -- --------------------------------------------------------
 
@@ -317,7 +305,60 @@ INSERT INTO `session` (`id`, `user_id`, `token`, `expires_at`) VALUES
 (134, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI2MDEwMjgsImV4cCI6MTc2MjYwODIyOH0.ZmL9I044pURXsaiPe4ewJRGm-xmR5nL4wzXjj_0Gbrk', '2025-11-08 21:23:48'),
 (135, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI3Nzg2NDgsImV4cCI6MTc2Mjc4NTg0OH0.WyMCR0ee77jtMDWz2e5LGYLM8Cz4d_UGAo_jkYeaI48', '2025-11-10 22:44:08'),
 (136, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI3NzkyOTQsImV4cCI6MTc2Mjc4NjQ5NH0.6B--_8YtgLR9nXHznU-LM2w_CTTKig9pCQh73qnzMpw', '2025-11-10 22:54:54'),
-(137, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI3ODAyODUsImV4cCI6MTc2Mjc4NzQ4NX0.2U3bVALkT5a7e7XsJAVU_6ehXEsbCHkia7WZECoo7iY', '2025-11-10 23:11:25');
+(137, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI3ODAyODUsImV4cCI6MTc2Mjc4NzQ4NX0.2U3bVALkT5a7e7XsJAVU_6ehXEsbCHkia7WZECoo7iY', '2025-11-10 23:11:25'),
+(138, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI4MzE3NDAsImV4cCI6MTc2MjgzODk0MH0.xRs8Xi0oOv6v6orCcKViHppt4o0jknjYnyC6UZBQ774', '2025-11-11 13:29:00'),
+(139, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI4MzQxMzcsImV4cCI6MTc2Mjg0MTMzN30.XksYQ68bZUaMRZUuSWDZSJWeHtvGG-KINjGV2PR5D8o', '2025-11-11 14:08:57'),
+(140, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI4MzY3MDAsImV4cCI6MTc2Mjg0MzkwMH0.XsbGc1NNluqX2wlBTcBOHcIaakbLvj1CqlvuWyd-3Ts', '2025-11-11 14:51:40'),
+(141, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI4MzY3MzcsImV4cCI6MTc2Mjg0MzkzN30.Q8gzh3MN54Qj6NwWG0py5kmcSqt_KwJ8DsSq593Nn9A', '2025-11-11 14:52:17'),
+(142, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI4Mzg1NDgsImV4cCI6MTc2Mjg0NTc0OH0.nCV4_FxvoO8BG6_zH6mgte-9S78HRXjMIqIVaHShJfY', '2025-11-11 15:22:28'),
+(143, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI4NjE5NTUsImV4cCI6MTc2Mjg2OTE1NX0.MYeiXNuJa028Xzl4hRUY_UFsa6dfu_o1G-mWbgHDgek', '2025-11-11 21:52:35'),
+(144, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI4NzE3NDUsImV4cCI6MTc2Mjg3ODk0NX0.916Hd8hWprpgNbj3netCTJlc66_YtURjNdVbrZcTJr8', '2025-11-12 00:35:44'),
+(145, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI5NTczNzcsImV4cCI6MTc2Mjk2NDU3N30.otNcEwofUkyZqafi8jxaSj4LujigwFc-dH9xOVpxXgM', '2025-11-13 00:22:57'),
+(146, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjI5NTc1MjUsImV4cCI6MTc2Mjk2NDcyNX0.8urHF-L5KnqL4enN89ILGy62rL3k-PSoE7_cvc5a_1A', '2025-11-13 00:25:25'),
+(147, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjI5NTg0ODgsImV4cCI6MTc2Mjk2NTY4OH0.pBvLfidNo8w2ZjuoZSPxD5-X02aBJ1pT6M16P3KBLU4', '2025-11-13 00:41:28'),
+(148, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMwMzU0MzcsImV4cCI6MTc2MzA0MjYzN30.S0F_T37ZKZyYflSOewiBQlPV8pMWSlg5B0gmSeAHUsk', '2025-11-13 22:03:57'),
+(149, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzc4MDAsImV4cCI6MTc2MzA0NTAwMH0.ceFiktvCMhDTWOPTQTwfjmzWjKYb_jbVn_IRrM2w_l0', '2025-11-13 22:43:20'),
+(150, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzc4MTEsImV4cCI6MTc2MzA0NTAxMX0.hN-RW7CHr1GeSFdQCRtGF9GXexndZFdyfEzwADGTHuI', '2025-11-13 22:43:31'),
+(151, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMwMzc5MjksImV4cCI6MTc2MzA0NTEyOX0.i7IpB4g6aMrhU0GDe_LoenUQ8XIYNmS4HJUnwVaBLnE', '2025-11-13 22:45:29'),
+(152, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzc5NDIsImV4cCI6MTc2MzA0NTE0Mn0.uUpoDaMyWn_VeVjrz82HQ_z37RhPt6pE-Nx-e68oIww', '2025-11-13 22:45:42'),
+(153, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzg0MDIsImV4cCI6MTc2MzA0NTYwMn0.B_4umYpVUSgpI7nr0ZHLHW4XkRy4ZCPgt5LVcFzLYCE', '2025-11-13 22:53:22'),
+(154, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzg5MjEsImV4cCI6MTc2MzA0NjEyMX0.wXFAGABY8AleWMnIdYJJNcBHK1IX34rjj-uxliJymXU', '2025-11-13 23:02:01'),
+(155, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzkwMjgsImV4cCI6MTc2MzA0NjIyOH0.aRhMRQcdgUcH1kIvmZ5EXTdGPU_EvdE3jV3X87oEdjk', '2025-11-13 23:03:48'),
+(156, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzkwNDAsImV4cCI6MTc2MzA0NjI0MH0.P6fTSqyvvpgpiDiBJkWn8bMwEJiQcbN-vTcJF2jNOGk', '2025-11-13 23:04:00'),
+(157, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzkzMjIsImV4cCI6MTc2MzA0NjUyMn0.3UuBFYB10J_Avqg3kltvfN-Vf0IB4q3t_dBZCMyKBzc', '2025-11-13 23:08:42'),
+(158, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzkzMjksImV4cCI6MTc2MzA0NjUyOX0.qW08uG7T_Wi3dw8KuwUtEtHde_VCca6W-gexYzQE4JU', '2025-11-13 23:08:49'),
+(159, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzk2NDYsImV4cCI6MTc2MzA0Njg0Nn0.q2AxpIJ43FabU_zdJuMaV9vVo9saEs5tFtomNZSH_n0', '2025-11-13 23:14:06'),
+(160, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwMzk4ODQsImV4cCI6MTc2MzA0NzA4NH0.vdq5zJgnKgKiTh79kFNFmjQzEmdig8G_4w38dNQWRf4', '2025-11-13 23:18:04'),
+(161, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwNDA0NDYsImV4cCI6MTc2MzA0NzY0Nn0.4FoT1f17VytPAYyC6IXk921_sR5pnz1oLPDP9Vv5Y8M', '2025-11-13 23:27:26'),
+(162, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwNDEwMzIsImV4cCI6MTc2MzA0ODIzMn0.F6SXQwrxfkgqI3Knr1qVsLkBsEW-2S_aH6H6ldgopAs', '2025-11-13 23:37:12'),
+(163, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMwNDEyNDcsImV4cCI6MTc2MzA0ODQ0N30.MQFhS2Wk2u70S6Q3d4MZDaMJ2h0Z3DZlmSved-kytkI', '2025-11-13 23:40:47'),
+(164, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMxMTIxOTMsImV4cCI6MTc2MzExOTM5M30.WM0-jKwi7NsW5K1QEMOpAc5DqzFy-Oklwmxwdv9UKR4', '2025-11-14 19:23:12'),
+(165, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMxMTIyMDksImV4cCI6MTc2MzExOTQwOX0.Klmf05DDPvjCYN7H2AWpu6v02qbUsAnAb7Y7ZFRQhYY', '2025-11-14 19:23:29'),
+(166, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMxMTMyNTQsImV4cCI6MTc2MzEyMDQ1NH0._l9ljlGHGYSSBoemflOsHRIBLU3Q7lgolHPfTs5XRlQ', '2025-11-14 19:40:54'),
+(167, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMxMTQyMjgsImV4cCI6MTc2MzEyMTQyOH0.DXIoE5QH4J8U5OJ_P5mrrGGmnofknF2b_Jg-D6zTx1M', '2025-11-14 19:57:08'),
+(168, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMxMjAxNDQsImV4cCI6MTc2MzEyNzM0NH0.d-y5ak5OWg1wPs3tfzDbomhv5zQ6Bsu432oArEz2x8c', '2025-11-14 21:35:44'),
+(169, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMxMjAxNzQsImV4cCI6MTc2MzEyNzM3NH0.e6grUh2b8vQFyF8j2pAFBhwFWo3nJYAiSZ0Ckt_Zcco', '2025-11-14 21:36:14'),
+(170, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMxODgwNzIsImV4cCI6MTc2MzE5NTI3Mn0.lgUmYCnaHTUBfgZYY_uwTG9GS64nJ3CI2IFJ460s4NU', '2025-11-15 16:27:52'),
+(171, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMxOTUyMDcsImV4cCI6MTc2MzIwMjQwN30.zuaCRrd5awZ8xVXpawJgt7uFH6BJzhyxIpPgKwQ2CEU', '2025-11-15 18:26:47'),
+(172, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMyMTE5MzcsImV4cCI6MTc2MzIxOTEzN30.jvuh3oQWF6E__m5m7i96QOgWn4JdIEhxtJRopLbceRE', '2025-11-15 23:05:37'),
+(173, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMyNzAyNjMsImV4cCI6MTc2MzI3NzQ2M30.cSD3QEAMH_K-IM6kLtfbzbWx18XRaj3zOPOJZfIo1fc', '2025-11-16 15:17:43'),
+(174, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMyNzM5ODQsImV4cCI6MTc2MzI4MTE4NH0.7iEMEmnGwgmbk81JHJjqTR3P4r1cFaQCuIYyFCETmZY', '2025-11-16 16:19:44'),
+(175, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMyODE3NTksImV4cCI6MTc2MzI4ODk1OX0.hVgrqAAJ-4IFBKuOwBwv4R8M_WFMi4ummKutvKVlII8', '2025-11-16 18:29:19'),
+(176, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMzNTI0NjgsImV4cCI6MTc2MzM1OTY2OH0.htcWdmjnYl4RP_XI0RXRBiqvSjljgZWWqWR-JV2ZCao', '2025-11-17 14:07:48'),
+(177, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMzNTM3MzgsImV4cCI6MTc2MzM2MDkzOH0.QTFeIZDqp1KJg6FzY5ftEf_ql2nzv5224B1K7Xlthfs', '2025-11-17 14:28:58'),
+(178, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMzNTU0MTQsImV4cCI6MTc2MzM2MjYxNH0.wwj5YJ_gmFYkYGUan6fNs5s_2wbWd2SiAettETmf2fc', '2025-11-17 14:56:54'),
+(179, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMzNTYwNzUsImV4cCI6MTc2MzM2MzI3NX0.m6EEz9DqRoeaEqYmENjs3weC9QkdnOMp5xhyhaZrmIc', '2025-11-17 15:07:55'),
+(180, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMzNTc1NjIsImV4cCI6MTc2MzM2NDc2Mn0.9pzfvxUweWHnfKy2jbm1VzCQ8OXX9XAVUxzLWtYq4t0', '2025-11-17 15:32:42'),
+(181, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMzNTc4NTYsImV4cCI6MTc2MzM2NTA1Nn0.gBj_GuI-2YAv4PXR7xFF6oh6c2jU8fjtqFvoNfXGKeQ', '2025-11-17 15:37:36'),
+(182, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMzNTc4ODUsImV4cCI6MTc2MzM2NTA4NX0.Ree4pbLd-4FWtv20XUEaLRZp0Z4Jr0o4Agj1TLZD3JE', '2025-11-17 15:38:05'),
+(183, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMzNTk2MzQsImV4cCI6MTc2MzM2NjgzNH0.zdl2Y5SAlS6TRS1lYSztYNuaIsgm9zxnLn72CcHkID8', '2025-11-17 16:07:14'),
+(184, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjMzNTk2NzMsImV4cCI6MTc2MzM2Njg3M30.oE19AISUX6gefxx8sBwEwG5lEfd2yidmuKbh76e0K7c', '2025-11-17 16:07:53'),
+(185, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjMzNjcwMTcsImV4cCI6MTc2MzM3NDIxN30.nfrR4pMAsLgtCw23AFCfh2ZXHPBYxCbRiFuPkLyKojk', '2025-11-17 18:10:17'),
+(186, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM1MjU3MDgsImV4cCI6MTc2MzUzMjkwOH0.YszqUoX2ks31aG4xHfja3sLRmBelQKx6NRK1G9TGADQ', '2025-11-19 14:15:08'),
+(187, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM1MjY2MDcsImV4cCI6MTc2MzUzMzgwN30.DEw1bvRJjqrCPJiuJoy8Uk-vb_Gq2YrksWEvLYjfrlQ', '2025-11-19 14:30:07'),
+(188, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM1MjY2MjIsImV4cCI6MTc2MzUzMzgyMn0.gRof1-wiPpn7yNiMOtEsFyLCQRbuJJ9MtLWnBMoH3bY', '2025-11-19 14:30:22'),
+(189, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM1MjY3MjYsImV4cCI6MTc2MzUzMzkyNn0.-mcRoMl7g_9S8gwEiT2UUM9Y9jBx_31Ei5qcFrZIVak', '2025-11-19 14:32:06'),
+(190, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM1Mjc0ODYsImV4cCI6MTc2MzUzNDY4Nn0.oGMpKtq6iuXLsAyw8HZHGCsDx9M32aqvRQM5MczTR2Y', '2025-11-19 14:44:46');
 
 -- --------------------------------------------------------
 
@@ -344,6 +385,7 @@ CREATE TABLE `users` (
   `ID` int(11) NOT NULL,
   `email` varchar(255) NOT NULL,
   `username` varchar(255) NOT NULL,
+  `section` varchar(64) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `role` varchar(50) NOT NULL,
   `verification_code` varchar(6) DEFAULT NULL,
@@ -355,9 +397,9 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`ID`, `email`, `username`, `password`, `role`, `verification_code`, `verification_expiry`, `is_verified`) VALUES
-(3, 'keithvirgenes17@gmail.com', 'Keith Justine A. Virgenes', '$2b$10$CToIc872O0BODciIYqrS1uSDIU0pG8/doQ0SXcBOvzPKKaOOMeyx.', 'student', NULL, NULL, 0),
-(4, 'justineabdon71@gmail.com', '131fgh', '$2b$10$POctQm8T.wciahfiegozPuO88tQ/B.CLxmK3l2dSwX99dr1zIPjYa', 'teacher', NULL, NULL, 0);
+INSERT INTO `users` (`ID`, `email`, `username`, `section`, `password`, `role`, `verification_code`, `verification_expiry`, `is_verified`) VALUES
+(3, 'keithvirgenes17@gmail.com', 'Keith Justine A. Virgenes', 'DIT 1-5', '$2b$10$CToIc872O0BODciIYqrS1uSDIU0pG8/doQ0SXcBOvzPKKaOOMeyx.', 'student', NULL, NULL, 0),
+(4, 'justineabdon71@gmail.com', '131fgh', NULL, '$2b$10$POctQm8T.wciahfiegozPuO88tQ/B.CLxmK3l2dSwX99dr1zIPjYa', 'teacher', NULL, NULL, 0);
 
 --
 -- Indexes for dumped tables
@@ -368,7 +410,8 @@ INSERT INTO `users` (`ID`, `email`, `username`, `password`, `role`, `verificatio
 --
 ALTER TABLE `classrooms`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `link` (`teacher_id`);
+  ADD KEY `link` (`teacher_id`),
+  ADD KEY `idx_classrooms_section` (`section`);
 
 --
 -- Indexes for table `classroom_members`
@@ -434,7 +477,8 @@ ALTER TABLE `submissions`
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
-  ADD PRIMARY KEY (`ID`);
+  ADD PRIMARY KEY (`ID`),
+  ADD KEY `idx_users_section` (`section`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -480,13 +524,13 @@ ALTER TABLE `quizzes`
 -- AUTO_INCREMENT for table `quiz_attempts`
 --
 ALTER TABLE `quiz_attempts`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `session`
 --
 ALTER TABLE `session`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=138;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=191;
 
 --
 -- AUTO_INCREMENT for table `submissions`

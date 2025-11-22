@@ -17,7 +17,7 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1);
 
-const client_url = process.env.CLIENT_ORIGIN || "ttp://localhost:3001";
+const client_url = process.env.CLIENT_ORIGIN || "ttp://localhost:3000";
 
 app.use(
   cors({
