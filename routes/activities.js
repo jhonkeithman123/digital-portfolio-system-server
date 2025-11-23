@@ -42,6 +42,70 @@ async function getClassroomForTeacher(code, teacherId) {
   return rows[0] || null;
 }
 
+router.get("/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const role = req.user.role;
+
+  console.log("userId", userId, "Id", id);
+
+  try {
+    const rows = await queryAsync(
+      `SELECT a.id,
+              a.classroom_id,
+              a.teacher_id,
+              a.title,
+              a.instructions,
+              a.file_path,
+              a.original_name,
+              a.mime_type,
+              a.created_at,
+              c.code as classroom_code
+      FROM activities a
+      JOIN classrooms c ON c.id = a.classroom_id
+      WHERE a.id = ?
+      LIMIT 1`,
+      [id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: "Not found" });
+    }
+
+    const activity = rows[0];
+
+    //* Authorize Access:
+    //* - Teacher must own the classroom
+    //* - Student: must be accepted member of the classroom
+    if (role === "teacher") {
+      if (activity.teacher_id !== userId) {
+        return res
+          .status(403)
+          .json({ success: false, error: "Forbidden for this activity" });
+      }
+    } else {
+      const memberRows = await queryAsync(
+        `SELECT 1
+         FROM classroom_members
+         WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
+         LIMIT 1`,
+        [activity.classroom_id, userId]
+      );
+
+      if (!memberRows.length) {
+        return res
+          .status(403)
+          .json({ success: false, error: "Forbidden for this activity" });
+      }
+    }
+
+    return res.json({ success: true, activity });
+  } catch (e) {
+    console.error("Error fetching activity:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 /* Teacher creates an activity */
 router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
   try {
