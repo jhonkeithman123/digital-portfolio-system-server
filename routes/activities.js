@@ -42,6 +42,38 @@ async function getClassroomForTeacher(code, teacherId) {
   return rows[0] || null;
 }
 
+async function authorizeActivity(activityId, userId, role) {
+  const rows = await queryAsync(
+    `SELECT a.id,
+            a.classroom_id,
+            a.teacher_id
+     FROM activities a
+     WHERE a.id = ?
+     LIMIT 1`,
+    [activityId]
+  );
+
+  if (!rows.length) return { ok: false, reason: "Activity not found" };
+  const activity = rows[0];
+
+  if (role === "teacher") {
+    if (activity.teacher_id !== userId)
+      return { ok: false, reason: "Forbidden" };
+  } else {
+    const member = await queryAsync(
+      `SELECT 1
+       FROM classroom_members
+       WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
+       LIMIT 1`,
+      [activity.classroom_id, userId]
+    );
+
+    if (!member.length) return { ok: false, reason: "Forbidden" };
+  }
+  return { ok: true, activity };
+}
+
+//* Router to get activities
 router.get("/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
@@ -51,7 +83,7 @@ router.get("/:id", verifyToken, async (req, res) => {
 
   try {
     const rows = await queryAsync(
-      `SELECT a.id,
+      `SELECT a.id, # to 
               a.classroom_id,
               a.teacher_id,
               a.title,
@@ -106,7 +138,111 @@ router.get("/:id", verifyToken, async (req, res) => {
   }
 });
 
-/* Teacher creates an activity */
+//* Router to get comments
+router.get("/:id/comments", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const role = req.user.role;
+
+  try {
+    //* Auth
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    //* Fetch comments (oldest first)
+    const comments = await queryAsync(
+      `SELECT c.id,
+              c.activity_id,
+              c.classroom_id,
+              c.user_id,
+              c.comment,
+              c.created_at,
+              c.updated_at,
+              u.username,
+              u.role
+       FROM comments c
+       JOIN users u ON c.user_id
+       WHERE c.activity_id = ? AND c.classroom_id = ?
+       ORDER BY c.created_at ASC`, //* ASC as in ascending order (oldest to newest)
+      [id, auth.activity.classroom_id]
+    );
+
+    return res.json({ success: true, comments });
+  } catch (e) {
+    console.error("Error fetching comments:", e);
+    return res.status(500).json({ error: "Error fetching comments" });
+  }
+});
+
+//* Router to modify the comments
+router.post("/:id/comments", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const role = req.user.role;
+  const { comment } = req.body;
+
+  try {
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    //* Validate comment
+    if (typeof comment !== "string") {
+      return res
+        .status(400)
+        .json({ success: false, error: "Comment text are required" });
+    }
+
+    //* Check if the comment is an empty string
+    const trimmed = comment.trim();
+    if (!trimmed.length) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Comments cannot be empty" });
+    }
+    const safe = trimmed.slice(0, 255); //* Enforce column length
+
+    const result = await queryAsync(
+      `INSERT INTO comments
+            (classroom_id, activity_id, user_id, comment, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NOW(), NOW())`,
+      [auth.activity.classroom_id, id, userId, safe]
+    );
+
+    const inserted = await queryAsync(
+      `SELECT c.id,
+              c.activity_id,
+              c.classroom_id,
+              c.user_id,
+              c.comment,
+              c.created_at,
+              c.updated_at,
+              u.username,
+              u.role
+       FROM comments c
+       JOIN users u ON u.ID = c.user_id
+       WHERE c.id = ?
+       LIMIT 1`,
+      [result.insertId]
+    );
+
+    return res.json({
+      success: true,
+      comment: inserted[0],
+      message: "Comment added",
+    });
+  } catch (e) {
+    console.error("Error fetching comments:", e);
+    return res.status(500).json({ error: "Error saving comments" });
+  }
+});
+
+//* Teacher creates an activity
 router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
   try {
     if (req.user.role !== "teacher")
@@ -155,7 +291,7 @@ router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
   }
 });
 
-/* List activities for a classroom (student or teacher) */
+//* List activities for a classroom (student or teacher)
 router.get("/classroom/:code", verifyToken, async (req, res) => {
   const { code } = req.params;
   const userId = req.user.id;
