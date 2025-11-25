@@ -82,8 +82,14 @@ router.get("/:id", verifyToken, async (req, res) => {
   console.log("userId", userId, "Id", id);
 
   try {
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
     const rows = await queryAsync(
-      `SELECT a.id, # to 
+      `SELECT a.id,
               a.classroom_id,
               a.teacher_id,
               a.title,
@@ -164,13 +170,41 @@ router.get("/:id/comments", verifyToken, async (req, res) => {
               u.username,
               u.role
        FROM comments c
-       JOIN users u ON c.user_id
+       JOIN users u ON u.ID = c.user_id
        WHERE c.activity_id = ? AND c.classroom_id = ?
        ORDER BY c.created_at ASC`, //* ASC as in ascending order (oldest to newest)
       [id, auth.activity.classroom_id]
     );
 
-    return res.json({ success: true, comments });
+    let repliesByComment = {};
+    if (comments.length) {
+      const ids = comments.map((c) => c.id);
+      const replies = await queryAsync(
+        `SELECT r.id,
+                r.comment_id,
+                r.user_id,
+                r.reply,
+                r.created_at,
+                r.updated_at,
+                u.username,
+                u.role
+         FROM comment_replies r
+         JOIN users u ON u.ID = r.user_id
+         WHERE r.comment_id IN (?)
+         ORDER BY r.created_at ASC`,
+        [ids]
+      );
+      replies.forEach((r) => {
+        (repliesByComment[r.comment_id] ||= []).push(r);
+      });
+    }
+
+    const payload = comments.map((c) => ({
+      ...c,
+      replies: repliesByComment[c.id] ?? [],
+    }));
+
+    return res.json({ success: true, comments: payload });
   } catch (e) {
     console.error("Error fetching comments:", e);
     return res.status(500).json({ error: "Error fetching comments" });
@@ -233,7 +267,7 @@ router.post("/:id/comments", verifyToken, async (req, res) => {
 
     return res.json({
       success: true,
-      comment: inserted[0],
+      comments: { ...inserted[0], replies: [] },
       message: "Comment added",
     });
   } catch (e) {
@@ -241,6 +275,82 @@ router.post("/:id/comments", verifyToken, async (req, res) => {
     return res.status(500).json({ error: "Error saving comments" });
   }
 });
+
+//* Router for the replies of the comments
+router.post(
+  "/:id/comments/:commentId/replies",
+  verifyToken,
+  async (req, res) => {
+    const { id, commentId } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
+    const { reply } = req.body;
+
+    try {
+      const auth = await authorizeActivity(id, userId, role);
+      if (!auth.ok) {
+        const status = auth.reason === "Activity not found" ? 404 : 403;
+        return res.status(status).json({ success: false, error: auth.reason });
+      }
+
+      if (typeof reply !== "string") {
+        return res
+          .status(400)
+          .json({ success: false, error: "Reply must be a string" });
+      }
+
+      const trimmed = reply.trim();
+      if (!trimmed) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Reply cannot be empty" });
+      }
+
+      const parent = await queryAsync(
+        `SELECT id FROM comments WHERE id = ? AND activity_id = ? LIMIT 1`,
+        [commentId, id]
+      );
+      if (!parent.length) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Comment not found" });
+      }
+
+      const safe = trimmed.slice(0, 255);
+      const result = await queryAsync(
+        `INSERT INTO comment_replies
+        (comment_id, user_id, reply, created_at, updated_at)
+       VALUES (?, ?, ?, NOW(), NOW())`,
+        [commentId, userId, safe]
+      );
+
+      const inserted = await queryAsync(
+        `SELECT r.id,
+              r.comment_id,
+              r.user_id,
+              r.reply,
+              r.created_at,
+              r.updated_at,
+              u.username,
+              u.role
+       FROM comment_replies r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.id = ?
+       LIMIT 1`,
+        [result.insertId]
+      );
+
+      return res.json({
+        success: true,
+        reply: inserted[0],
+        message: "Reply added",
+      });
+    } catch (e) {
+      console.error("Error adding reply:", e);
+      return res.status(500).json({ success: false, error: "Server error" });
+    }
+  }
+);
 
 //* Teacher creates an activity
 router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
