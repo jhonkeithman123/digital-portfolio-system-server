@@ -8,12 +8,20 @@ router.post(
   "/csp-report",
   express.json({ type: "application/csp-report" }),
   (req, res) => {
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+    
     console.error("CSP Violation", req.body);
     res.status(204).end();
   }
 );
 
 router.post("/tamper-log", express.json(), async (req, res) => {
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+  
   const { type, detectedAt, role, userId } = req.body;
   const logMessage = `Tampering detected at ${new Date(
     detectedAt

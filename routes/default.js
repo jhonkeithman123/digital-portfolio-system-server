@@ -5,6 +5,10 @@ import { queryAsync } from "../config/helpers/dbHelper.js";
 const router = express.Router();
 
 router.get("/notifications", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const query = `
         SELECT * FROM notifications
         WHERE recipient_id = ?
@@ -24,6 +28,10 @@ router.get("/notifications", verifyToken, async (req, res) => {
 });
 
 router.post("/notifications/:id/read", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const teacherId = req.user.id;
   const query = `UPDATE notifications SET is_read = TRUE WHERE id = ? AND recipient_id = ?`;
 
@@ -40,6 +48,10 @@ router.post("/notifications/:id/read", verifyToken, async (req, res) => {
 
 // Mark ALL current user's notifications as read
 router.post("/notifications/mark-all-read", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   try {
     await queryAsync(
       "UPDATE notifications SET is_read = TRUE WHERE recipient_id = ? AND is_read = FALSE",
@@ -54,6 +66,10 @@ router.post("/notifications/mark-all-read", verifyToken, async (req, res) => {
 
 // Batch mark selected IDs (owned by user) as read
 router.post("/notifications/read-batch", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const ids = Array.isArray(req.body?.ids)
     ? req.body.ids.filter(Number.isInteger)
     : [];
@@ -71,6 +87,10 @@ router.post("/notifications/read-batch", verifyToken, async (req, res) => {
 });
 
 router.get("/users/sections", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   try {
     const rows = await queryAsync(
       "SELECT DISTINCT section FROM users WHERE role='student' AND section IS NOT NULL ORDER BY section"
@@ -83,6 +103,10 @@ router.get("/users/sections", verifyToken, async (req, res) => {
 
 // Students list (optionally only those missing section)
 router.get("/users/students", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   try {
     if (req.user.role !== "teacher") {
       return res.status(403).json({ success: false, message: "Forbidden" });
@@ -105,6 +129,10 @@ router.get("/users/students", verifyToken, async (req, res) => {
 
 // Update a single student's section
 router.patch("/users/:id/section", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   try {
     if (req.user.role !== "teacher") {
       return res.status(403).json({ success: false, message: "Forbidden" });

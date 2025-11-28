@@ -10,6 +10,10 @@ const router = express.Router();
 
 //* Checks if the student is already in the classroom
 router.get("/student", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const studentId = req.user.id;
 
   const query = `
@@ -57,6 +61,10 @@ router.get("/student", verifyToken, async (req, res) => {
 
 //* Checks if the teacher already has a classroom
 router.get("/teacher", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const teacherId = req.user.id;
 
   try {
@@ -86,6 +94,10 @@ router.get("/teacher", verifyToken, async (req, res) => {
 });
 
 router.post("/create", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { name, schoolYear, section } = req.body;
   const teacherId = req.user.id;
   const code = generateCode();
@@ -110,6 +122,10 @@ router.post("/create", verifyToken, async (req, res) => {
 });
 
 router.patch("/teacher/section", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const teacherId = req.user.id;
   let { section, code } = req.body;
   console.log("section from save classroom section: ", section);
@@ -163,6 +179,10 @@ router.patch("/teacher/section", verifyToken, async (req, res) => {
 
 //* Get students not already invited/accepted for a classroom
 router.get("/:code/students", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { code } = req.params;
   const { section } = req.query;
 
@@ -198,6 +218,10 @@ router.get("/:code/students", verifyToken, async (req, res) => {
 });
 
 router.post("/:code/invite", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { studentId } = req.body;
   const { code } = req.params;
 
@@ -253,6 +277,10 @@ router.post("/:code/invite", verifyToken, async (req, res) => {
 });
 
 router.get("/invites", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const studentId = req.user.id;
 
   const sql = `
@@ -298,6 +326,10 @@ router.post("/invites/:inviteId/hide", verifyToken, async (req, res) => {
 });
 
 router.post("/invites/:inviteId/accept", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const studentId = req.user.id;
   const { inviteId } = req.params;
 
@@ -329,6 +361,10 @@ router.post("/invites/:inviteId/accept", verifyToken, async (req, res) => {
 });
 
 router.post("/join", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const studentId = req.user.id;
   const { code } = req.body;
 

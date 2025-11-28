@@ -48,6 +48,10 @@ router.get("/session", verifyToken, async (req, res) => {
 
 // Current user's profile (includes section)
 router.get("/me", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   try {
     const [user] = await queryAsync(
       "SELECT id, username AS name, email, role, section FROM users WHERE id = ?",
@@ -64,6 +68,10 @@ router.get("/me", verifyToken, async (req, res) => {
 
 // Student can set their section ONLY if it is currently NULL/empty
 router.patch("/me/section", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+
   try {
     if (req.user.role !== "student") {
       return res.status(403).json({ success: false, message: "Forbidden" });
@@ -90,10 +98,18 @@ router.patch("/me/section", verifyToken, async (req, res) => {
 });
 
 router.get("/ping", verifyToken, (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   return res.json({ success: true, userId: req.user.id });
 });
 
 router.post("/login", async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+
   const { email, password, role: intendedRole } = req.body;
 
   const normEmail = email.toLowerCase();
@@ -138,11 +154,19 @@ router.post("/login", async (req, res) => {
 
 // Logout: clear cookie (and let client clear local storage if it uses it)
 router.post("/logout", (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   clearAuthCookie(res);
   return res.json({ success: true });
 });
 
 router.post("/signup", async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { name, email, password, role, section } = req.body;
 
   const normedEmail = email.toLowerCase();
@@ -175,6 +199,10 @@ router.post("/signup", async (req, res) => {
 });
 
 router.post("/request-verification", async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { email, role } = req.body;
 
   if (!email || !role) {
@@ -230,6 +258,10 @@ router.post("/request-verification", async (req, res) => {
 });
 
 router.post("/verify-code", async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { email, code } = req.body;
   const normEmail = email.toLowerCase();
 
@@ -263,6 +295,10 @@ router.post("/verify-code", async (req, res) => {
 });
 
 router.patch("/reset-password", async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { email, newPassword } = req.body;
   const normEmail = email.toLowerCase();
 

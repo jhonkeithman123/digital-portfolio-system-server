@@ -12,6 +12,8 @@ import classrooms from "./routes/classrooms.js";
 import quizzes from "./routes/quizzes.js";
 import activities from "./routes/activities.js";
 
+import db from "./config/db.js";
+
 dotenv.config();
 
 const app = express();
@@ -27,6 +29,7 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -47,6 +50,19 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+
+// add a small middleware to expose DB availability in responses
+app.use((req, res, next) => {
+  try {
+    const status = db?.isDbAvailable ? (db.isDbAvailable() ? "available" : "unavailable") : "unknown";
+    res.setHeader("X-DB-Status", status);
+    // expose to handlers if needed
+    req.dbAvailable = status === "available";
+  } catch (e) {
+    req.dbAvailable = false;
+  }
+  next();
+});
 
 // human-friendly landing page for browser visits to "/"
 // only responds when the client requests HTML; API clients will continue to work.

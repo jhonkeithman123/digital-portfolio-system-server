@@ -15,6 +15,7 @@ const storage = multer.diskStorage({
     cb(null, `${ts}__${base}`);
   },
 });
+
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
@@ -75,6 +76,10 @@ async function authorizeActivity(activityId, userId, role) {
 
 //* Router to get activities
 router.get("/:id", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+
   const { id } = req.params;
   const userId = req.user.id;
   const role = req.user.role;
@@ -146,6 +151,10 @@ router.get("/:id", verifyToken, async (req, res) => {
 
 //* Router to get comments
 router.get("/:id/comments", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+
   const { id } = req.params;
   const userId = req.user.id;
   const role = req.user.role;
@@ -213,6 +222,10 @@ router.get("/:id/comments", verifyToken, async (req, res) => {
 
 //* Router to modify the comments
 router.post("/:id/comments", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+
   const { id } = req.params;
   const userId = req.user.id;
   const role = req.user.role;
@@ -281,6 +294,10 @@ router.post(
   "/:id/comments/:commentId/replies",
   verifyToken,
   async (req, res) => {
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+    
     const { id, commentId } = req.params;
     const userId = req.user.id;
     const role = req.user.role;
@@ -354,6 +371,10 @@ router.post(
 
 //* Teacher creates an activity
 router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   try {
     if (req.user.role !== "teacher")
       return res.status(403).json({ success: false, error: "Forbidden" });
@@ -403,6 +424,10 @@ router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
 
 //* List activities for a classroom (student or teacher)
 router.get("/classroom/:code", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { code } = req.params;
   const userId = req.user.id;
   const role = req.user.role;

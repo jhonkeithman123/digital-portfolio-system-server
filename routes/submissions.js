@@ -4,6 +4,10 @@ import db from '../config/db.js';
 const router = express.Router();
 
 router.post('/feedback', express.json(), (req, res) => {
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+    
     const { feedback } = req.body;
     const userId = req.user.id;
 

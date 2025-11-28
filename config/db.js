@@ -1,5 +1,6 @@
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
+import EventEmitter from "events";
 
 dotenv.config();
 
@@ -9,72 +10,96 @@ const {
   DB_USER = "if0_40541559",
   DB_PASS = "Justine0917",
   DB_NAME = "if0_40541559_digital_portfolio",
-  DB_RETRY_ATTEMPTS = 5,
-  DB_RETRY_BACKOFF_MS = 1000,
-  SKIP_DB_ON_START = "false", // set to "true" to continue without DB (useful for dev)
+  DB_RETRY_ATTEMPTS = 0, // 0 = retry forever
+  DB_RETRY_BACKOFF_MS = 2000,
+  SKIP_DB_ON_START = "false",
 } = process.env;
 
-console.log("Attempting to connect to DB:", DB_HOST);
-
+const eventBus = new EventEmitter();
 let pool = null;
+let connecting = false;
+let attempts = 0;
 
-async function createPoolWithRetry() {
-  let attempt = 0;
-  while (attempt < Number(DB_RETRY_ATTEMPTS)) {
-    try {
-      const p = mysql.createPool({
-        host: DB_HOST,
-        port: Number(DB_PORT),
-        user: DB_USER,
-        password: DB_PASS,
-        database: DB_NAME,
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0,
-      });
-
-      // quick smoke test
-      await p.query("SELECT 1");
-      console.log("Connected to MySQL:", `${DB_HOST}:${DB_PORT}`);
-      return p;
-    } catch (err) {
-      attempt += 1;
-      console.error(`DB connection attempt ${attempt} failed:`, err?.code || err?.message || err);
-      if (attempt >= Number(DB_RETRY_ATTEMPTS)) {
-        console.error("Exceeded DB connection attempts.");
-        if (SKIP_DB_ON_START === "true") {
-          console.warn("Continuing without DB (SKIP_DB_ON_START=true). Some routes will fail.");
-          return null;
-        }
-        // exit so the platform shows a failing deploy (optional)
-        process.exit(1);
-      }
-      const wait = Number(DB_RETRY_BACKOFF_MS) * attempt;
-      console.log(`Retrying DB connection in ${wait}ms...`);
-      await new Promise((r) => setTimeout(r, wait));
-    }
-  }
-  return null;
+function isDbAvailable() {
+  return !!pool;
 }
 
-export async function getPool() {
+async function tryConnectOnce() {
+  try {
+    const p = mysql.createPool({
+      host: DB_HOST,
+      port: Number(DB_PORT),
+      user: DB_USER,
+      password: DB_PASS,
+      database: DB_NAME,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+    });
+    await p.query("SELECT 1");
+    pool = p;
+    attempts = 0;
+    console.log("DB connected:", `${DB_HOST}:${DB_PORT}`);
+    eventBus.emit("connected");
+    return true;
+  } catch (err) {
+    attempts += 1;
+    const code = err?.code || err?.message || err;
+    console.warn(`DB connect attempt ${attempts} failed:`, code);
+    return false;
+  }
+}
+
+async function connectLoop() {
+  if (connecting) return;
+  connecting = true;
+  console.log("Starting DB connect loop to", DB_HOST);
+  while (!pool) {
+    const ok = await tryConnectOnce();
+    if (ok) break;
+    // If SKIP_DB_ON_START true and first attempts exhausted, stop trying immediately
+    if (SKIP_DB_ON_START === "true" && attempts > 0) {
+      console.warn("SKIP_DB_ON_START=true — continuing without DB. Will still retry in background.");
+      break;
+    }
+    const backoff = Math.min(Number(DB_RETRY_BACKOFF_MS) * Math.max(1, attempts), 60_000);
+    await new Promise((r) => setTimeout(r, backoff));
+  }
+  connecting = false;
+  // If we are not connected, keep trying in background periodically
+  if (!pool) {
+    setInterval(async () => {
+      if (!pool) await tryConnectOnce();
+    }, Math.max(5000, Number(DB_RETRY_BACKOFF_MS)));
+  }
+}
+
+// public helpers
+async function getPool() {
   if (pool) return pool;
-  pool = await createPoolWithRetry();
+  // attempt immediate connect once (non-blocking for callers)
+  await tryConnectOnce();
   return pool;
 }
 
-export async function query(sql, params = []) {
+async function query(sql, params = []) {
   const p = await getPool();
-  if (!p) throw new Error("Database not available");
+  if (!p) {
+    const err = new Error("Database not available");
+    err.code = "DB_NOT_AVAILABLE";
+    throw err;
+  }
   return p.execute(sql, params);
 }
 
-// eager init (optional)
-getPool().catch((err) => {
-  console.error("DB initialization error:", err?.message || err);
+// start background connection attempts immediately
+connectLoop().catch((err) => {
+  console.error("DB connect loop error:", err?.message || err);
 });
 
 export default {
   getPool,
   query,
+  isDbAvailable,
+  on: (ev, cb) => eventBus.on(ev, cb),
 };

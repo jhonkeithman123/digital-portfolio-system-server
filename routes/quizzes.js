@@ -84,6 +84,10 @@ const parseQuestions = (raw) => {
 };
 
 router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+
   const { code, quizId } = req.params;
   const userId = req.user.id;
   const role = req.user.role;
@@ -142,6 +146,10 @@ router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
 });
 
 router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const teacherId = req.user.id;
   if (!teacherId)
     return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -307,6 +315,10 @@ router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
 });
 
 router.put("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const teacherId = req.user.id;
   const { code, quizId } = req.params;
   const {
@@ -449,6 +461,10 @@ router.put("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
 });
 
 router.delete("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const teacherId = req.user.id;
   const { code, quizId } = req.params;
 
@@ -482,6 +498,10 @@ router.delete("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
 });
 
 router.get("/:code/quizzes", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { code } = req.params;
 
   try {
@@ -504,6 +524,10 @@ router.get("/:code/quizzes", verifyToken, async (req, res) => {
 });
 
 router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { code, quizId } = req.params;
   const studentId = req.user.id;
 
@@ -567,6 +591,10 @@ router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
 });
 
 router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { code, quizId } = req.params;
   const studentId = req.user.id;
   const { attemptId, answers } = req.body;
@@ -627,6 +655,10 @@ router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
 
 // GET attempts for a quiz (teacher-only). ?status=needs_grading|completed|in_progress|all
 router.get("/:code/quizzes/:quizId/attempts", verifyToken, async (req, res) => {
+  if (!req.dbAvailable) {
+    return res.status(503).json({ ok: false, error: "Database not available" });
+  }
+  
   const { code, quizId } = req.params;
   const { status = "needs_grading" } = req.query; // default to needs_grading
   const requesterId = req.user.id;
@@ -723,6 +755,10 @@ router.patch(
   "/:code/quizzes/:quizId/attempts/:attemptId/grade",
   verifyToken,
   async (req, res) => {
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+    
     const { code, quizId, attemptId } = req.params;
     const { score, grading = {}, comment = "" } = req.body;
     const requesterId = req.user.id;
