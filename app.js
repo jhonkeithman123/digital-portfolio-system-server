@@ -19,7 +19,7 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1);
 
-const client_url = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const client_url = process.env.CLIENT_ORIGIN || "https://jhonkeithman123.github.io";
 
 app.use(
   cors({
@@ -111,7 +111,7 @@ app.get("/", (req, res, next) => {
         <p>This server hosts the API used by the frontend application. It's intended for programmatic access only. If you navigated here in a browser, open the client application instead.</p>
         <div class="actions">
           <a class="btn btn-primary" href="${clientUrl}" target="_blank" rel="noopener">Open Frontend</a>
-          <a class="btn btn-ghost" href="${clientUrl}/docs" target="_blank" rel="noopener">Client docs</a>
+          <a class="btn btn-ghost" href="${client_docs}/docs" target="_blank" rel="noopener">Client docs</a>
         </div>
         <div class="meta">
           For API access use endpoints like <code>/auth</code>, <code>/classrooms</code>, <code>/quizzes</code>. Requests should be made from the official client or an authorized service.
