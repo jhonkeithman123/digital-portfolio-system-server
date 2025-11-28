@@ -66,7 +66,7 @@ function tryListen(port, attemptsLeft) {
   });
 
   server.on("error", (err) => {
-    if (err && err.code === " EADDRINUSE") {
+    if (err && err.code === "EADDRINUSE") {
       console.warn(`PORT ${port} in use.`);
 
       try {
