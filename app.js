@@ -71,6 +71,7 @@ app.get("/", (req, res, next) => {
   if (!accept.includes("text/html")) return next();
 
   const clientUrl = client_url;
+  const client_docs = "https://github.com/jhonkeithman123/digital-portfolio-system-client/blob/main/For_Client.md";
   const accent = process.env.ACCENT_COLOR || "#007bff";
 
   res.type("html").status(200).send(`<!doctype html>
