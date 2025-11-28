@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Nov 21, 2025 at 01:31 PM
--- Server version: 10.4.28-MariaDB
--- PHP Version: 8.2.4
+-- Generation Time: Nov 28, 2025 at 07:15 AM
+-- Server version: 10.4.32-MariaDB
+-- PHP Version: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -20,6 +20,31 @@ SET time_zone = "+00:00";
 --
 -- Database: `digital_portfolio_system`
 --
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `activities`
+--
+
+CREATE TABLE `activities` (
+  `id` int(11) NOT NULL,
+  `classroom_id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL,
+  `title` varchar(150) NOT NULL,
+  `instructions` text NOT NULL,
+  `file_path` varchar(255) DEFAULT NULL,
+  `original_name` varchar(255) DEFAULT NULL,
+  `mime_type` varchar(100) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `activities`
+--
+
+INSERT INTO `activities` (`id`, `classroom_id`, `teacher_id`, `title`, `instructions`, `file_path`, `original_name`, `mime_type`, `created_at`) VALUES
+(1, 5, 4, 'Sample Activity', 'This is a sample activity', NULL, NULL, NULL, '2025-11-16 08:04:55');
 
 -- --------------------------------------------------------
 
@@ -67,6 +92,58 @@ CREATE TABLE `classroom_members` (
 
 INSERT INTO `classroom_members` (`id`, `classroom_id`, `student_id`, `joined_at`, `status`, `code`, `name`) VALUES
 (5, 5, 3, '2025-10-24 14:12:29', 'accepted', 'mUq0oFzlui', 'Advisory');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `comments`
+--
+
+CREATE TABLE `comments` (
+  `id` int(11) NOT NULL,
+  `classroom_id` int(11) NOT NULL,
+  `activity_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `comment` varchar(255) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `comments`
+--
+
+INSERT INTO `comments` (`id`, `classroom_id`, `activity_id`, `user_id`, `comment`, `created_at`, `updated_at`) VALUES
+(10, 5, 1, 3, 'Hi', '2025-11-25 19:15:03', '2025-11-25 19:15:03'),
+(11, 5, 1, 3, 'hi', '2025-11-25 19:42:45', '2025-11-25 19:42:45'),
+(12, 5, 1, 3, 'Hi', '2025-11-25 19:54:31', '2025-11-25 19:54:31'),
+(13, 5, 1, 3, 'Hi', '2025-11-25 20:14:31', '2025-11-25 20:14:31'),
+(14, 5, 1, 3, 'Lol', '2025-11-25 22:20:36', '2025-11-25 22:20:36');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `comment_replies`
+--
+
+CREATE TABLE `comment_replies` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `comment_id` int(11) NOT NULL,
+  `reply` varchar(255) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `comment_replies`
+--
+
+INSERT INTO `comment_replies` (`id`, `user_id`, `comment_id`, `reply`, `created_at`, `updated_at`) VALUES
+(1, 3, 10, 'lol', '2025-11-25 22:00:34', '2025-11-25 22:00:34'),
+(2, 3, 10, 'lol', '2025-11-25 22:00:54', '2025-11-25 22:00:54'),
+(3, 3, 14, 'lol', '2025-11-25 22:20:44', '2025-11-25 22:20:44'),
+(4, 3, 10, 'hi', '2025-11-28 13:01:43', '2025-11-28 13:01:43');
 
 -- --------------------------------------------------------
 
@@ -142,6 +219,13 @@ CREATE TABLE `quizzes` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `quizzes`
+--
+
+INSERT INTO `quizzes` (`id`, `classroom_id`, `teacher_id`, `title`, `questions`, `attempts`, `attempts_allowed`, `start_time`, `end_time`, `time_limit_seconds`, `created_at`) VALUES
+(10, 5, 4, 'Sample Quiz', '{\"pages\":[{\"id\":\"page-nr7b0wu\",\"title\":\"Sample Question 1\",\"questions\":[{\"id\":\"q-6qluvqh\",\"type\":\"multiple_choice\",\"text\":\"This is a sample question\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":\"2\"}]},{\"id\":\"page-n82yeti\",\"title\":\"Sample Question 2\",\"questions\":[{\"id\":\"q-av8ehts\",\"type\":\"short_answer\",\"text\":\"This is a sample question\",\"sentenceLimit\":3,\"correctAnswer\":\"\"}]},{\"id\":\"page-zwwfkoo\",\"title\":\"Sample Question 3\",\"questions\":[{\"id\":\"q-jplbmr8\",\"type\":\"paragraph\",\"text\":\"This is a sample question\",\"sentenceLimit\":5,\"correctAnswer\":\"\"}]},{\"id\":\"page-qks1hhs\",\"title\":\"Sample Question 4\",\"questions\":[{\"id\":\"q-d71ndc7\",\"type\":\"checkboxes\",\"text\":\"This is a sample question\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[]}]}]}', 0, 2, NULL, NULL, 3600, '2025-11-24 02:41:58');
+
 -- --------------------------------------------------------
 
 --
@@ -164,6 +248,40 @@ CREATE TABLE `quiz_attempts` (
   `submitted_at` datetime DEFAULT NULL,
   `expires_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `quiz_attempts`
+--
+
+INSERT INTO `quiz_attempts` (`id`, `quiz_id`, `student_id`, `attempt_no`, `answers`, `score`, `grading`, `comment`, `graded_at`, `grader_id`, `status`, `started_at`, `submitted_at`, `expires_at`) VALUES
+(7, 10, 4, 1, '{\"q-6qluvqh\":\"0\",\"q-av8ehts\":\"this is a sample answer\"}', 25, NULL, NULL, NULL, NULL, 'completed', '2025-11-24 11:05:40', '2025-11-24 11:12:47', '2025-11-24 12:05:40'),
+(8, 10, 4, 2, '{\"q-6qluvqh\":\"0\",\"q-av8ehts\":\"this is a sample answer\\n\",\"q-jplbmr8\":\"lol answer\",\"q-d71ndc7\":[\"0\",\"1\",\"2\",\"3\"]}', 0, NULL, NULL, NULL, NULL, 'completed', '2025-11-24 11:24:06', '2025-11-24 11:25:04', '2025-11-24 12:24:06'),
+(9, 10, 3, 1, '{\"q-6qluvqh\":\"2\",\"q-av8ehts\":\"ahhhhhhhhhhhhhhhhhhhhhhhhhhh\",\"q-jplbmr8\":\"lol\",\"q-d71ndc7\":[0,1,2,3]}', 25, NULL, NULL, NULL, NULL, 'completed', '2025-11-25 19:03:16', '2025-11-25 19:03:42', '2025-11-25 20:03:16');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `quiz_pages`
+--
+
+CREATE TABLE `quiz_pages` (
+  `id` int(11) UNSIGNED NOT NULL,
+  `quiz_id` int(11) UNSIGNED NOT NULL,
+  `page_index` int(11) UNSIGNED NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `content_json` longtext NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `quiz_pages`
+--
+
+INSERT INTO `quiz_pages` (`id`, `quiz_id`, `page_index`, `title`, `content_json`, `created_at`) VALUES
+(32, 10, 0, 'Sample Question 1', '{\"questions\":[{\"id\":\"q-6qluvqh\",\"type\":\"multiple_choice\",\"text\":\"This is a sample question\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":\"2\"}]}', '2025-11-24 02:41:58'),
+(33, 10, 1, 'Sample Question 2', '{\"questions\":[{\"id\":\"q-av8ehts\",\"type\":\"short_answer\",\"text\":\"This is a sample question\",\"sentenceLimit\":3,\"correctAnswer\":\"\"}]}', '2025-11-24 02:41:58'),
+(34, 10, 2, 'Sample Question 3', '{\"questions\":[{\"id\":\"q-jplbmr8\",\"type\":\"paragraph\",\"text\":\"This is a sample question\",\"sentenceLimit\":5,\"correctAnswer\":\"\"}]}', '2025-11-24 02:41:58'),
+(35, 10, 3, 'Sample Question 4', '{\"questions\":[{\"id\":\"q-d71ndc7\",\"type\":\"checkboxes\",\"text\":\"This is a sample question\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[]}]}', '2025-11-24 02:41:58');
 
 -- --------------------------------------------------------
 
@@ -358,7 +476,25 @@ INSERT INTO `session` (`id`, `user_id`, `token`, `expires_at`) VALUES
 (187, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM1MjY2MDcsImV4cCI6MTc2MzUzMzgwN30.DEw1bvRJjqrCPJiuJoy8Uk-vb_Gq2YrksWEvLYjfrlQ', '2025-11-19 14:30:07'),
 (188, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM1MjY2MjIsImV4cCI6MTc2MzUzMzgyMn0.gRof1-wiPpn7yNiMOtEsFyLCQRbuJJ9MtLWnBMoH3bY', '2025-11-19 14:30:22'),
 (189, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM1MjY3MjYsImV4cCI6MTc2MzUzMzkyNn0.-mcRoMl7g_9S8gwEiT2UUM9Y9jBx_31Ei5qcFrZIVak', '2025-11-19 14:32:06'),
-(190, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM1Mjc0ODYsImV4cCI6MTc2MzUzNDY4Nn0.oGMpKtq6iuXLsAyw8HZHGCsDx9M32aqvRQM5MczTR2Y', '2025-11-19 14:44:46');
+(190, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM1Mjc0ODYsImV4cCI6MTc2MzUzNDY4Nn0.oGMpKtq6iuXLsAyw8HZHGCsDx9M32aqvRQM5MczTR2Y', '2025-11-19 14:44:46'),
+(191, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM3ODU5MDksImV4cCI6MTc2Mzc5MzEwOX0.iyJ4jqmRBWwShFqqZGM5Yei9Hg_-NjooYrTCuQmPZHE', '2025-11-22 14:31:49'),
+(192, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM3ODYwNDksImV4cCI6MTc2Mzc5MzI0OX0.1hshXbbMwgu0HC4BQNq1BGDuJa24uC4aIa96ZYGTK-s', '2025-11-22 14:34:09'),
+(193, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM3ODgyNjIsImV4cCI6MTc2Mzc5NTQ2Mn0.0_Ti8IoyFQAT-jACSma_L2g1XJFLjj14N3B5aWIp3ss', '2025-11-22 15:11:02'),
+(194, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM3OTAxNDMsImV4cCI6MTc2Mzc5NzM0M30.bDxIClilc2xrwz7_Dh7SQyo_iprDITp8k7llCPnbLbI', '2025-11-22 15:42:23'),
+(195, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM3OTAxNzIsImV4cCI6MTc2Mzc5NzM3Mn0.K3xMNC9D1Razg857vzngXosNh1qIrmuBDtPgY2COcJE', '2025-11-22 15:42:52'),
+(196, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM4MDAzODEsImV4cCI6MTc2MzgwNzU4MX0.gsmL2bM2BzRCsn-ilJtZ0vWbTLuRZmW39lEmvzzuz5w', '2025-11-22 18:33:01'),
+(197, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM4NzU3NTYsImV4cCI6MTc2Mzg4Mjk1Nn0.9tLYAuV_GjdsLFYPcqm8yy6RreGhRI1n23Hd9SgyY38', '2025-11-23 15:29:16'),
+(198, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjM4ODMyNTIsImV4cCI6MTc2Mzg5MDQ1Mn0.9pHm_QZj11PnBki51V_Zm7aIy8CAIhNKNHd_34bybro', '2025-11-23 17:34:12'),
+(199, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM4ODMyODgsImV4cCI6MTc2Mzg5MDQ4OH0.USvf3vsjvqEJzxquP7-MUAPKBRO1FmyZZm_j5fd8lak', '2025-11-23 17:34:48'),
+(200, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM5NDU0MjMsImV4cCI6MTc2Mzk1MjYyM30.mH_lIv7iXp2ktJ1DrFY4nFNwUdLZ_rzyWczYg3KNBEg', '2025-11-24 10:50:23'),
+(201, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjM5NTI3MDQsImV4cCI6MTc2Mzk1OTkwNH0.sFjDkV-preg4SlhG3jTNdu5-SLa5qTOEn6QqLNuzons', '2025-11-24 12:51:44'),
+(202, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjQwNDAzODgsImV4cCI6MTc2NDA0NzU4OH0.-Xej-reyrSXgLe38O4LmAcgK5JEM5qBtITVfh1edwD0', '2025-11-25 13:13:08'),
+(203, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjQwNjc2MzUsImV4cCI6MTc2NDA3NDgzNX0.O6MZ3H7X8HZUUNkztJNNWqiijqWh5usKKD4TzZ8psmc', '2025-11-25 20:47:15'),
+(204, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjQwNzc5OTMsImV4cCI6MTc2NDA4NTE5M30.FxrErU52QT_7efmE70kIFZf5XodmoDMQpgSl3-4yvk0', '2025-11-25 23:39:53'),
+(205, 4, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwicm9sZSI6InRlYWNoZXIiLCJpYXQiOjE3NjQxNjE2OTMsImV4cCI6MTc2NDE2ODg5M30.nr7xuCbApJoILkkdryHBhjlkW2ZTZG-AE1TziyN_u3M', '2025-11-26 22:54:53'),
+(206, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjQyMTA1NjYsImV4cCI6MTc2NDIxNzc2Nn0.LxS5GRdLfQcjG3gfIqZBKu2lXaCZVdeQFsVcqv5DrQ0', '2025-11-27 12:29:26'),
+(207, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjQyMzY4ODQsImV4cCI6MTc2NDI0NDA4NH0.wiHc9sv2AlremzPzGOgSjeZbXiLX5NBdKUoynCqmovY', '2025-11-27 19:48:04'),
+(208, 3, 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Mywicm9sZSI6InN0dWRlbnQiLCJpYXQiOjE3NjQzMDYwODMsImV4cCI6MTc2NDMxMzI4M30.hwCghBhUmQnZEv02MuiwgwRdG144U71L8h62EhhRN6Q', '2025-11-28 15:01:23');
 
 -- --------------------------------------------------------
 
@@ -406,6 +542,14 @@ INSERT INTO `users` (`ID`, `email`, `username`, `section`, `password`, `role`, `
 --
 
 --
+-- Indexes for table `activities`
+--
+ALTER TABLE `activities`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `classroom_id` (`classroom_id`),
+  ADD KEY `teacher_id` (`teacher_id`);
+
+--
 -- Indexes for table `classrooms`
 --
 ALTER TABLE `classrooms`
@@ -420,6 +564,23 @@ ALTER TABLE `classroom_members`
   ADD PRIMARY KEY (`id`),
   ADD KEY `link3` (`classroom_id`),
   ADD KEY `link4` (`student_id`);
+
+--
+-- Indexes for table `comments`
+--
+ALTER TABLE `comments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `activity_id` (`activity_id`),
+  ADD KEY `classroom_id` (`classroom_id`),
+  ADD KEY `user_id` (`user_id`);
+
+--
+-- Indexes for table `comment_replies`
+--
+ALTER TABLE `comment_replies`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `comment_id` (`comment_id`),
+  ADD KEY `user_id` (`user_id`);
 
 --
 -- Indexes for table `hidden_invites`
@@ -459,6 +620,13 @@ ALTER TABLE `quiz_attempts`
   ADD KEY `student_id` (`student_id`);
 
 --
+-- Indexes for table `quiz_pages`
+--
+ALTER TABLE `quiz_pages`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_qp_quiz` (`quiz_id`,`page_index`);
+
+--
 -- Indexes for table `session`
 --
 ALTER TABLE `session`
@@ -485,6 +653,12 @@ ALTER TABLE `users`
 --
 
 --
+-- AUTO_INCREMENT for table `activities`
+--
+ALTER TABLE `activities`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `classrooms`
 --
 ALTER TABLE `classrooms`
@@ -495,6 +669,18 @@ ALTER TABLE `classrooms`
 --
 ALTER TABLE `classroom_members`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `comments`
+--
+ALTER TABLE `comments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+
+--
+-- AUTO_INCREMENT for table `comment_replies`
+--
+ALTER TABLE `comment_replies`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `hidden_invites`
@@ -518,19 +704,25 @@ ALTER TABLE `notifications`
 -- AUTO_INCREMENT for table `quizzes`
 --
 ALTER TABLE `quizzes`
-  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `quiz_attempts`
 --
 ALTER TABLE `quiz_attempts`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+
+--
+-- AUTO_INCREMENT for table `quiz_pages`
+--
+ALTER TABLE `quiz_pages`
+  MODIFY `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
 
 --
 -- AUTO_INCREMENT for table `session`
 --
 ALTER TABLE `session`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=191;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=209;
 
 --
 -- AUTO_INCREMENT for table `submissions`
@@ -549,6 +741,13 @@ ALTER TABLE `users`
 --
 
 --
+-- Constraints for table `activities`
+--
+ALTER TABLE `activities`
+  ADD CONSTRAINT `activities_ibfk_1` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `activities_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE;
+
+--
 -- Constraints for table `classrooms`
 --
 ALTER TABLE `classrooms`
@@ -560,6 +759,21 @@ ALTER TABLE `classrooms`
 ALTER TABLE `classroom_members`
   ADD CONSTRAINT `link3` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`),
   ADD CONSTRAINT `link4` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`);
+
+--
+-- Constraints for table `comments`
+--
+ALTER TABLE `comments`
+  ADD CONSTRAINT `comments_ibfk_1` FOREIGN KEY (`activity_id`) REFERENCES `activities` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `comments_ibfk_2` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `comments_ibfk_3` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`);
+
+--
+-- Constraints for table `comment_replies`
+--
+ALTER TABLE `comment_replies`
+  ADD CONSTRAINT `comment_replies_ibfk_1` FOREIGN KEY (`comment_id`) REFERENCES `comments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `comment_replies_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`);
 
 --
 -- Constraints for table `hidden_invites`
@@ -579,6 +793,12 @@ ALTER TABLE `logging`
 --
 ALTER TABLE `quizzes`
   ADD CONSTRAINT `fk_quizzes_classroom` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `quiz_pages`
+--
+ALTER TABLE `quiz_pages`
+  ADD CONSTRAINT `fk_qp_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `session`
