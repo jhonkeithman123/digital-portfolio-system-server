@@ -4,11 +4,11 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const {
-  DB_HOST = "localhost",
+  DB_HOST = "sql100.infinityfree.com",
   DB_PORT = 3306,
-  DB_USER = "root",
-  DB_PASS = "",
-  DB_NAME = "digital_portfolio_system",
+  DB_USER = "if0_40541559",
+  DB_PASS = "Justine0917",
+  DB_NAME = "if0_40541559_digital_portfolio",
   DB_RETRY_ATTEMPTS = 5,
   DB_RETRY_BACKOFF_MS = 1000,
   SKIP_DB_ON_START = "false", // set to "true" to continue without DB (useful for dev)
