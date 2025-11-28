@@ -48,6 +48,64 @@ app.use(
   })
 );
 
+// human-friendly landing page for browser visits to "/"
+// only responds when the client requests HTML; API clients will continue to work.
+app.get("/", (req, res, next) => {
+  const accept = req.headers.accept || "";
+  if (!accept.includes("text/html")) return next();
+
+  const clientUrl = client_url;
+  const accent = process.env.ACCENT_COLOR || "#007bff";
+
+  res.type("html").status(200).send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Backend API Service</title>
+  <style>
+    :root {
+      --accent: ${accent};
+      --bg: #0f1720;
+      --card: #0b1220;
+      --muted: #9aa4b2;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,var(--bg) 0%, #061221 100%);-webkit-font-smoothing:antialiased}
+    .wrap{min-height:100%;display:flex;align-items:center;justify-content:center;padding:32px}
+    .card{max-width:880px;width:100%;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.04);border-radius:14px;padding:28px;box-shadow:0 8px 30px rgba(2,6,23,0.6);backdrop-filter: blur(6px);display:grid;grid-template-columns:120px 1fr;gap:20px;align-items:center}
+    .logo{width:96px;height:96px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#6f42c1);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:28px;box-shadow:0 6px 18px rgba(0,0,0,0.45)}
+    h1{margin:0;font-size:20px}
+    p{margin:8px 0;color:var(--muted);line-height:1.4}
+    .actions{margin-top:14px;display:flex;gap:12px}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:none;cursor:pointer;text-decoration:none;font-weight:600}
+    .btn-primary{background:linear-gradient(90deg,var(--accent),#e55370);color:white;box-shadow:0 6px 18px rgba(0,0,0,0.35)}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .meta{font-size:13px;color:var(--muted);margin-top:8px}
+    code{background:rgba(255,255,255,0.02);padding:4px 8px;border-radius:6px;color:#cfe7ff}
+    @media (max-width:640px){.card{grid-template-columns:1fr; text-align:center}.logo{margin-inline:auto}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" role="region" aria-labelledby="title">
+      <div class="logo" aria-hidden="true">API</div>
+      <div>
+        <h1 id="title">Backend API — Not a user-facing site</h1>
+        <p>This server hosts the API used by the frontend application. It's intended for programmatic access only. If you navigated here in a browser, open the client application instead.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="${clientUrl}" target="_blank" rel="noopener">Open Frontend</a>
+          <a class="btn btn-ghost" href="${clientUrl}/docs" target="_blank" rel="noopener">Client docs</a>
+        </div>
+        <div class="meta">
+          For API access use endpoints like <code>/auth</code>, <code>/classrooms</code>, <code>/quizzes</code>. Requests should be made from the official client or an authorized service.
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`);
+});
+
 app.use("/", mainRoute);
 app.use("/auth", auth);
 app.use("/api", submission);
