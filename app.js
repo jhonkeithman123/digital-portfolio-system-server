@@ -21,9 +21,35 @@ app.set("trust proxy", 1);
 
 const client_url = process.env.CLIENT_ORIGIN || "https://jhonkeithman123.github.io";
 
+const rawAllowed = process.env.ALLOWED_ORIGINS || client_url;
+const allowedList = rawAllowed.split(",").map((s) => s.trim()).filter(Boolean);
+
+const allowedHosts = allowedList.map((entry) => {
+  try {
+    return new URL(entry).hostname;
+  } catch {
+    return entry; // keep non-URL entries as-is
+  }
+});
+
 app.use(
   cors({
-    origin: client_url,
+    origin: (origin, callback) => {
+      // allow non-browser requests (no origin header) like curl, server-to-server
+      if (!origin) return callback(null, true);
+
+      try {
+        const originUrl = new URL(origin);
+        // exact origin match (including protocol/port)
+        if (allowedList.includes(origin)) return callback(null, true);
+        // hostname match (allows both http and https)
+        if (allowedHosts.includes(originUrl.hostname)) return callback(null, true);
+      } catch {
+        // fallthrough to deny
+      }
+
+      return callback(new Error("CORS: origin not allowed"), false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
