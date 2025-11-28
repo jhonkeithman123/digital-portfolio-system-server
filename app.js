@@ -56,5 +56,38 @@ app.use("/classrooms", classrooms);
 app.use("/quizzes", quizzes);
 app.use("/activity", activities);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`server running on port ${PORT}`));
+const DEFAULT_PORT = parseInt(process.env.PORT ?? "5000", 10);
+const MAX_ATTEMPTS = 10;
+
+function tryListen(port, attemptsLeft) {
+  const server = app.listen(port);
+  server.on("listening", () => {
+    console.log(`Server listening in port ${port}`);
+  });
+
+  server.on("error", (err) => {
+    if (err && err.code === " EADDRINUSE") {
+      console.warn(`PORT ${port} in use.`);
+
+      try {
+        server.close();
+      } catch (e) {
+        //* Ignore
+      }
+
+      if (attemptsLeft > 0) {
+        const next = port + 1;
+        console.log(`Trying port ${next} (${attemptsLeft - 1} attempts left)`);
+        tryListen(next, attemptsLeft - 1);
+      } else {
+        console.error(`No available ports after ${MAX_ATTEMPTS} attempts. Exiting`);
+        process.exit(1);
+      }
+    } else {
+      console.error("Server error:", err);
+      process.exit(1);
+    }
+  });
+}
+
+tryListen(DEFAULT_PORT, MAX_ATTEMPTS);
