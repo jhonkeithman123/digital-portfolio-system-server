@@ -32,6 +32,19 @@ const allowedHosts = allowedList.map((entry) => {
   }
 });
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  const origin = req.headers.origin || "<none>";
+  console.info(`[REQ START] ${new Date().toISOString()} ${req.ip} ${req.method} ${req.originalUrl} origin=${origin}`);
+
+  res.on("finish", () => {
+    const dur = Date.now() - start;
+    console.info(`[REQ END]   ${new Date().toISOString()} ${req.ip} ${req.method} ${req.originalUrl} status=${res.statusCode} dur=${dur}ms`);
+  });
+
+  next();
+});
+
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -156,6 +169,24 @@ app.use("/security", security);
 app.use("/classrooms", classrooms);
 app.use("/quizzes", quizzes);
 app.use("/activity", activities);
+
+app.use((err, req, res, next) => {
+  console.error(`[UNHANDLED ERROR] ${new Date().toISOString()} ${req.method} ${req.originalUrl} err=${err?.stack || err}`);
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Internal Server Error" });
+  } else {
+    next(err);
+  }
+});
+
+// catch process-level failures
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException:", err);
+  // process.exit(1) // after logging
+});
 
 const DEFAULT_PORT = parseInt(process.env.PORT ?? "5000", 10);
 const MAX_ATTEMPTS = 10;
