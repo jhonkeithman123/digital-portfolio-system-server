@@ -67,7 +67,7 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        connectSrc: ["'self'", client_url],
+        connectSrc: ["'self'", client_url, "https://digital-portfolio-system-server.onrender.com"],
         frameAncestors: ["'none'"],
         formAction: ["'self'"],
       },
