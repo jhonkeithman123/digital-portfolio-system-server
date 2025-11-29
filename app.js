@@ -19,7 +19,7 @@ dotenv.config();
 const app = express();
 app.set("trust proxy", 1);
 
-const client_url = process.env.CLIENT_ORIGIN || "https://jhonkeithman123.github.io";
+const client_url = process.env.CLIENT_ORIGIN || "https://jhonkeithman123.github.io/digital-portfolio-system-client/";
 
 const rawAllowed = process.env.ALLOWED_ORIGINS || client_url;
 const allowedList = rawAllowed.split(",").map((s) => s.trim()).filter(Boolean);
