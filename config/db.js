@@ -5,11 +5,6 @@ import EventEmitter from "events";
 dotenv.config();
 
 const {
-  DB_HOST = "sql100.infinityfree.com",
-  DB_PORT = 3306,
-  DB_USER = "if0_40541559",
-  DB_PASS = "Justine0917",
-  DB_NAME = "if0_40541559_digital_portfolio",
   DB_RETRY_ATTEMPTS = 0, // 0 = retry forever
   DB_RETRY_BACKOFF_MS = 2000,
   SKIP_DB_ON_START = "false",
@@ -27,11 +22,11 @@ function isDbAvailable() {
 async function tryConnectOnce() {
   try {
     const p = mysql.createPool({
-      host: DB_HOST,
-      port: Number(DB_PORT),
-      user: DB_USER,
-      password: DB_PASS,
-      database: DB_NAME,
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT),
+      user: process.env.DB_USER,
+      password: process.env.DB_PASS,
+      database: process.env.DB_NAME,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -39,7 +34,7 @@ async function tryConnectOnce() {
     await p.query("SELECT 1");
     pool = p;
     attempts = 0;
-    console.log("DB connected:", `${DB_HOST}:${DB_PORT}`);
+    console.log("DB connected:", `${process.env.DB_HOST}:${process.env.DB_PORT}`);
     eventBus.emit("connected");
     return true;
   } catch (err) {
@@ -53,7 +48,7 @@ async function tryConnectOnce() {
 async function connectLoop() {
   if (connecting) return;
   connecting = true;
-  console.log("Starting DB connect loop to", DB_HOST);
+  console.log("Starting DB connect loop to", process.env.DB_HOST);
   while (!pool) {
     const ok = await tryConnectOnce();
     if (ok) break;
