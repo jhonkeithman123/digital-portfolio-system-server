@@ -25,10 +25,10 @@ const router = express.Router();
 
 router.get(
   "/session",
-  verifyToken,
   wrapAsync(async (req, res) => {
     console.info(`[AUTH] GET /session entered ${new Date().toISOString()} ip=${req.ip}`);
     const userId = req.user.id;
+    console("User id:", userId);
 
     try {
       const user = await findOneUserBy("ID", userId, [
