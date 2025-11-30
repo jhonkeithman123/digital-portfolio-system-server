@@ -1,4 +1,3 @@
-import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import EventEmitter from "events";
 
@@ -8,6 +7,8 @@ const {
   DB_RETRY_ATTEMPTS = 0, // 0 = retry forever
   DB_RETRY_BACKOFF_MS = 2000,
   SKIP_DB_ON_START = "false",
+  DB_SSL = "false", // <-- new env flag: "true" or "false"
+  DB_SSL_REJECT_UNAUTHORIZED = "false", // optional
 } = process.env;
 
 const eventBus = new EventEmitter();
@@ -21,18 +22,29 @@ function isDbAvailable() {
 
 async function tryConnectOnce() {
   try {
-    const p = mysql.createPool({
+    const mysql = await import("mysql2/promise");
+    
+    const poolOptions = {
       host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT),
+      port: Number(process.env.DB_PORT || 3306),
       user: process.env.DB_USER,
       password: process.env.DB_PASS,
       database: process.env.DB_NAME,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
-    });
-    await p.query("SELECT 1");
-    pool = p;
+    };
+
+    // configure ssl behavior from env
+    if (DB_SSL === "true" || DB_SSL === "1") {
+      poolOptions.ssl = { rejectUnauthorized: DB_SSL_REJECT_UNAUTHORIZED === "true" };
+    } else {
+      // explicitly disable ssl for servers that don't support it
+      poolOptions.ssl = false;
+    }
+    pool = mysql.createPool(poolOptions);
+
+    await pool.query("SELECT 1");
     attempts = 0;
     console.log("DB connected:", `${process.env.DB_HOST}:${process.env.DB_PORT}`);
     eventBus.emit("connected");

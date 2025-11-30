@@ -11,6 +11,27 @@ function validateIdentifier(name) {
   }
 }
 
+/** Run a DB query but fail fast if it takes too long */
+async function queryWithTimeout(sql, params = [], timeoutMs = 8000) {
+  const start = Date.now();
+  const p = db.query(sql, params);
+  const timeout = new Promise((_, rej) =>
+    setTimeout(() => rej(new Error(`DB query timed out after ${timeoutMs}ms`)), timeoutMs)
+  );
+  try {
+    const result = await Promise.race([p, timeout]);
+    const dur = Date.now() - start;
+    // mysql2/promise returns [rows, fields] for execute()
+    const rows = Array.isArray(result) ? result[0] : result;
+    console.info(`[DB] query OK (${dur}ms) sql=${sql.split(/\s+/).slice(0,6).join(" ")} paramsLen=${params.length}`);
+    return rows;
+  } catch (err) {
+    const dur = Date.now() - start;
+    console.warn(`[DB] query ERR (${dur}ms) sql=${sql.split(/\s+/).slice(0,6).join(" ")} err=${err?.message || err}`);
+    throw err;
+  }
+}
+
 /**
  * Retrieves a single row from a table based on a specific field and value.
  * @param {string} field - Column name to filter by (e.g., "email", "id").
@@ -18,20 +39,12 @@ function validateIdentifier(name) {
  * @param {string[]} [fields=["*"]] - Columns to select
  * @returns {Promise<Object|null>}
  */
-export function findOneUserBy(field, value, fields = ["*"]) {
-  return new Promise((resolve, reject) => {
-    try {
-      validateIdentifier(field);
-      const select = fields.join(", ");
-      const sql = `SELECT ${select} FROM users WHERE ${field} = ? LIMIT 1`;
-      db.query(sql, [value], (err, results) => {
-        if (err) return reject(err);
-        resolve(results[0] || null);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
+export async function findOneUserBy(field, value, fields = ["*"]) {
+  validateIdentifier(field);
+  const select = fields.join(", ");
+  const sql = `SELECT ${select} FROM users WHERE ${field} = ? LIMIT 1`;
+  const rows = await queryWithTimeout(sql, [value]);
+  return (rows && rows[0]) || null;
 }
 
 /**
@@ -41,20 +54,12 @@ export function findOneUserBy(field, value, fields = ["*"]) {
  * @param {string[]} [fields=["*"]]
  * @returns {Promise<Object[]>}
  */
-export function findUsersBy(field, value, fields = ["*"]) {
-  return new Promise((resolve, reject) => {
-    try {
-      validateIdentifier(field);
-      const select = fields.join(", ");
-      const sql = `SELECT ${select} FROM users WHERE ${field} = ?`;
-      db.query(sql, [value], (err, results) => {
-        if (err) return reject(err);
-        resolve(results);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
+export async function findUsersBy(field, value, fields = ["*"]) {
+  validateIdentifier(field);
+  const select = fields.join(", ");
+  const sql = `SELECT ${select} FROM users WHERE ${field} = ?`;
+  const rows = await queryWithTimeout(sql, [value]);
+  return rows || [];
 }
 
 /**
@@ -63,25 +68,17 @@ export function findUsersBy(field, value, fields = ["*"]) {
  * @param {Object} data
  * @returns {Promise<number>} - resolves with insertId
  */
-export function insertRecord(table, data) {
-  return new Promise((resolve, reject) => {
-    try {
-      validateIdentifier(table);
-      const fields = Object.keys(data);
-      fields.forEach(validateIdentifier);
-      const values = Object.values(data);
-      const placeholders = fields.map(() => "?").join(", ");
-      const sql = `INSERT INTO \`${table}\` (${fields.join(
-        ", "
-      )}) VALUES (${placeholders})`;
-      db.query(sql, values, (err, result) => {
-        if (err) return reject(err);
-        resolve(result.insertId);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
+export async function insertRecord(table, data) {
+  validateIdentifier(table);
+  const fields = Object.keys(data);
+  fields.forEach(validateIdentifier);
+  const values = Object.values(data);
+  const placeholders = fields.map(() => "?").join(", ");
+  const sql = `INSERT INTO \`${table}\` (${fields.join(", ")}) VALUES (${placeholders})`;
+  // db.query returns [result, fields]
+  const result = await db.query(sql, values);
+  const insertResult = Array.isArray(result) ? result[0] : result;
+  return insertResult.insertId;
 }
 
 /**
@@ -91,29 +88,22 @@ export function insertRecord(table, data) {
  * @param {Object} conditions
  * @returns {Promise<number>} - resolves with affectedRows
  */
-export function updateRecord(table, updates, conditions) {
-  return new Promise((resolve, reject) => {
-    try {
-      validateIdentifier(table);
-      const updateFields = Object.keys(updates);
-      updateFields.forEach(validateIdentifier);
-      const whereFields = Object.keys(conditions);
-      whereFields.forEach(validateIdentifier);
+export async function updateRecord(table, updates, conditions) {
+  validateIdentifier(table);
+  const updateFields = Object.keys(updates);
+  updateFields.forEach(validateIdentifier);
+  const whereFields = Object.keys(conditions);
+  whereFields.forEach(validateIdentifier);
 
-      const updateClause = updateFields.map((f) => `${f} = ?`).join(", ");
-      const whereClause = whereFields.map((f) => `${f} = ?`).join(" AND ");
+  const updateClause = updateFields.map((f) => `${f} = ?`).join(", ");
+  const whereClause = whereFields.map((f) => `${f} = ?`).join(" AND ");
 
-      const sql = `UPDATE \`${table}\` SET ${updateClause} WHERE ${whereClause}`;
-      const params = [...Object.values(updates), ...Object.values(conditions)];
+  const sql = `UPDATE \`${table}\` SET ${updateClause} WHERE ${whereClause}`;
+  const params = [...Object.values(updates), ...Object.values(conditions)];
 
-      db.query(sql, params, (err, result) => {
-        if (err) return reject(err);
-        resolve(result.affectedRows);
-      });
-    } catch (err) {
-      reject(err);
-    }
-  });
+  const result = await db.query(sql, params);
+  const updateResult = Array.isArray(result) ? result[0] : result;
+  return updateResult.affectedRows;
 }
 
 /**
@@ -122,11 +112,7 @@ export function updateRecord(table, updates, conditions) {
  * @param {Array} params  - The parameters to be passed in an array
  * @returns {Promise<any>} - Returns a Promise
  */
-export function queryAsync(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.query(sql, params, (err, results) => {
-      if (err) return reject(err);
-      resolve(results);
-    });
-  });
+export async function queryAsync(sql, params = []) {
+  const rows = await queryWithTimeout(sql, params);
+  return rows;
 }

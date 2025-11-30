@@ -1,13 +1,13 @@
-import db from './db.js';
+import db from "./db.js";
 
-const test_db = () => {
-    db.query('SELECT 1 + 1 AS result', (err, results) => {
-        if (err) {
-            console.error('Database test failed:', err);
-        }
-
-        console.log('Database test success:', results[0].result);
-    });
-};
+async function test_db() {
+  try {
+    const result = await db.query("SELECT 1 + 1 AS result");
+    const rows = Array.isArray(result) ? result[0] : result;
+    console.log("Database test success:", rows?.[0]?.result);
+  } catch (err) {
+    console.error("Database test failed:", err?.message || err);
+  }
+}
 
 test_db();

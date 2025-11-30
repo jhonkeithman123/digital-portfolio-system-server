@@ -7,13 +7,15 @@ import db from "../db.js";
  * @param {Date} expiresAt - Expiration timestamp.
  * @returns {Promise<void>}
  */
-export function createSession(userId, token, expiresAt) {
-  return new Promise((resolve, reject) => {
-    const sql =
-      "INSERT INTO session (user_id, token, expires_at) VALUES (?, ?, ?)";
-    db.query(sql, [userId, token, expiresAt], (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+export async function createSession(userId, token, expiresAt) {
+  const sql = "INSERT INTO session (user_id, token, expires_at) VALUES (?, ?, ?)";
+  try {
+    const result = await db.query(sql, [userId, token, expiresAt]);
+    // result may be [rows, fields] depending on mysql2; no need to return anything
+    console.info(`[DB] createSession OK userId=${userId}`);
+    return;
+  } catch (err) {
+    console.error(`[DB] createSession ERR userId=${userId} err=${err?.message || err}`);
+    throw err;
+  }
 }

@@ -5,6 +5,10 @@ dotenv.config();
 const email = process.env.EMAIL_USER;
 const password = process.env.EMAIL_PASS;
 
+if (!email || !password) {
+  console.warn("Email credentials missing (EMAIL_USER / EMAIL_PASS)");
+}
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -26,7 +30,9 @@ export const sendVerificationEmail = async (to, code, expiry) => {
         <p>If you didn't request this, please ignore the message.</p>
       `,
     });
+    console.info(`[EMAIL] verification sent to ${to}`);
   } catch (error) {
-    console.error("Error transporting email:", error);
+    console.error("Error transporting email:", error?.message || error);
+    throw error;
   }
 };
