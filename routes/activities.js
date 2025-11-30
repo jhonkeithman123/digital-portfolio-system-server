@@ -135,9 +135,9 @@ router.get(
       } else {
         const memberRows = await queryAsync(
           `SELECT 1
-         FROM classroom_members
-         WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
-         LIMIT 1`,
+           FROM classroom_members
+           WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
+           LIMIT 1`,
           [activity.classroom_id, userId]
         );
 
@@ -428,8 +428,8 @@ router.post(
 
       const result = await queryAsync(
         `INSERT INTO activities
-          (classroom_id, teacher_id, title, instructions, file_path, original_name, mime_type)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (classroom_id, teacher_id, title, instructions, file_path, original_name, mime_type, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           classroom.id,
           req.user.id,
