@@ -192,8 +192,8 @@ router.post("/signup", wrapAsync(async (req, res) => {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
 
-  const { name, email, password, role, section } = req.body || {};
-  if (!name || !email || !password || !role) {
+  const { username, email, password, role, section } = req.body || {};
+  if (!username || !email || !password || !role) {
     console.info("[AUTH] signup validation failed - missing fields");
     return res.status(400).json({ error: "name, email, password and role are required." });
   }
@@ -206,13 +206,13 @@ router.post("/signup", wrapAsync(async (req, res) => {
     const existingEmail = await findOneUserBy("email", normedEmail);
     if (existingEmail) return res.status(409).json({ error: "Email already registered." });
 
-    const existingUsername = await findOneUserBy("username", name);
+    const existingUsername = await findOneUserBy("username", username);
     if (existingUsername) return res.status(409).json({ error: "Username already exists." });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const insertId = await insertRecord("users", {
-      username: name,
+      username: username,
       email: normedEmail,
       password: hashedPassword,
       role,
