@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import multer from "multer";
+import wrapAsync from "../utils/wrapAsync.js";
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
 
@@ -75,7 +76,7 @@ async function authorizeActivity(activityId, userId, role) {
 }
 
 //* Router to get activities
-router.get("/:id", verifyToken, async (req, res) => {
+router.get("/:id", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -147,153 +148,155 @@ router.get("/:id", verifyToken, async (req, res) => {
     console.error("Error fetching activity:", e);
     res.status(500).json({ error: "Server error" });
   }
-});
+}));
 
-//* Router to get comments
-router.get("/:id/comments", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
-  const { id } = req.params;
-  const userId = req.user.id;
-  const role = req.user.role;
-
-  try {
-    //* Auth
-    const auth = await authorizeActivity(id, userId, role);
-    if (!auth.ok) {
-      const status = auth.reason === "Activity not found" ? 404 : 403;
-      return res.status(status).json({ success: false, error: auth.reason });
+router
+  .route("/:id/comments")
+  .all(verifyToken)
+  //* Router to get comments
+  .get(wrapAsync(async (req, res) => { 
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
     }
 
-    //* Fetch comments (oldest first)
-    const comments = await queryAsync(
-      `SELECT c.id,
-              c.activity_id,
-              c.classroom_id,
-              c.user_id,
-              c.comment,
-              c.created_at,
-              c.updated_at,
-              u.username,
-              u.role
-       FROM comments c
-       JOIN users u ON u.ID = c.user_id
-       WHERE c.activity_id = ? AND c.classroom_id = ?
-       ORDER BY c.created_at ASC`, //* ASC as in ascending order (oldest to newest)
-      [id, auth.activity.classroom_id]
-    );
+    const { id } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
 
-    let repliesByComment = {};
-    if (comments.length) {
-      const ids = comments.map((c) => c.id);
-      const replies = await queryAsync(
-        `SELECT r.id,
-                r.comment_id,
-                r.user_id,
-                r.reply,
-                r.created_at,
-                r.updated_at,
+    try {
+      //* Auth
+      const auth = await authorizeActivity(id, userId, role);
+      if (!auth.ok) {
+        const status = auth.reason === "Activity not found" ? 404 : 403;
+        return res.status(status).json({ success: false, error: auth.reason });
+      }
+
+      //* Fetch comments (oldest first)
+      const comments = await queryAsync(
+        `SELECT c.id,
+                c.activity_id,
+                c.classroom_id,
+                c.user_id,
+                c.comment,
+                c.created_at,
+                c.updated_at,
                 u.username,
                 u.role
-         FROM comment_replies r
-         JOIN users u ON u.ID = r.user_id
-         WHERE r.comment_id IN (?)
-         ORDER BY r.created_at ASC`,
-        [ids]
+         FROM comments c
+         JOIN users u ON u.ID = c.user_id
+         WHERE c.activity_id = ? AND c.classroom_id = ?
+         ORDER BY c.created_at ASC`,
+        [id, auth.activity.classroom_id]
       );
-      replies.forEach((r) => {
-        (repliesByComment[r.comment_id] ||= []).push(r);
+
+      let repliesByComment = {};
+      if (comments.length) {
+        const ids = comments.map((c) => c.id);
+        const replies = await queryAsync(
+          `SELECT r.id,
+                  r.comment_id,
+                  r.user_id,
+                  r.reply,
+                  r.created_at,
+                  r.updated_at,
+                  u.username,
+                  u.role
+           FROM comment_replies r
+           JOIN users u ON u.ID = r.user_id
+           WHERE r.comment_id IN (?)
+           ORDER BY r.created_at ASC`,
+          [ids]
+        );
+        replies.forEach((r) => {
+          (repliesByComment[r.comment_id] ||= []).push(r);
+        });
+      }
+
+      const payload = comments.map((c) => ({
+        ...c,
+        replies: repliesByComment[c.id] ?? [],
+      }));
+
+      return res.json({ success: true, comments: payload });
+    } catch (e) {
+      console.error("Error fetching comments:", e);
+      return res.status(500).json({ error: "Error fetching comments" });
+    }
+  }))
+  //* Router to modify the comments
+  .post(wrapAsync(async (req, res) => { 
+    if (!req.dbAvailable) {
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+
+    const { id } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
+    const { comment } = req.body;
+
+    try {
+      const auth = await authorizeActivity(id, userId, role);
+      if (!auth.ok) {
+        const status = auth.reason === "Activity not found" ? 404 : 403;
+        return res.status(status).json({ success: false, error: auth.reason });
+      }
+
+      //* Validate comment
+      if (typeof comment !== "string") {
+        return res
+          .status(400)
+          .json({ success: false, error: "Comment text are required" });
+      }
+
+      //* Check if the comment is an empty string
+      const trimmed = comment.trim();
+      if (!trimmed.length) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Comments cannot be empty" });
+      }
+      const safe = trimmed.slice(0, 255); //* Enforce column length
+
+      const result = await queryAsync(
+        `INSERT INTO comments
+              (classroom_id, activity_id, user_id, comment, created_at, updated_at)
+         VALUES (?, ?, ?, ?, NOW(), NOW())`,
+        [auth.activity.classroom_id, id, userId, safe]
+      );
+
+      const inserted = await queryAsync(
+        `SELECT c.id,
+                c.activity_id,
+                c.classroom_id,
+                c.user_id,
+                c.comment,
+                c.created_at,
+                c.updated_at,
+                u.username,
+                u.role
+         FROM comments c
+         JOIN users u ON u.ID = c.user_id
+         WHERE c.id = ?
+         LIMIT 1`,
+        [result.insertId]
+      );
+
+      return res.json({
+        success: true,
+        comments: { ...inserted[0], replies: [] },
+        message: "Comment added",
       });
+    } catch (e) {
+      console.error("Error fetching comments:", e);
+      return res.status(500).json({ error: "Error saving comments" });
     }
-
-    const payload = comments.map((c) => ({
-      ...c,
-      replies: repliesByComment[c.id] ?? [],
-    }));
-
-    return res.json({ success: true, comments: payload });
-  } catch (e) {
-    console.error("Error fetching comments:", e);
-    return res.status(500).json({ error: "Error fetching comments" });
-  }
-});
-
-//* Router to modify the comments
-router.post("/:id/comments", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
-  const { id } = req.params;
-  const userId = req.user.id;
-  const role = req.user.role;
-  const { comment } = req.body;
-
-  try {
-    const auth = await authorizeActivity(id, userId, role);
-    if (!auth.ok) {
-      const status = auth.reason === "Activity not found" ? 404 : 403;
-      return res.status(status).json({ success: false, error: auth.reason });
-    }
-
-    //* Validate comment
-    if (typeof comment !== "string") {
-      return res
-        .status(400)
-        .json({ success: false, error: "Comment text are required" });
-    }
-
-    //* Check if the comment is an empty string
-    const trimmed = comment.trim();
-    if (!trimmed.length) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Comments cannot be empty" });
-    }
-    const safe = trimmed.slice(0, 255); //* Enforce column length
-
-    const result = await queryAsync(
-      `INSERT INTO comments
-            (classroom_id, activity_id, user_id, comment, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NOW(), NOW())`,
-      [auth.activity.classroom_id, id, userId, safe]
-    );
-
-    const inserted = await queryAsync(
-      `SELECT c.id,
-              c.activity_id,
-              c.classroom_id,
-              c.user_id,
-              c.comment,
-              c.created_at,
-              c.updated_at,
-              u.username,
-              u.role
-       FROM comments c
-       JOIN users u ON u.ID = c.user_id
-       WHERE c.id = ?
-       LIMIT 1`,
-      [result.insertId]
-    );
-
-    return res.json({
-      success: true,
-      comments: { ...inserted[0], replies: [] },
-      message: "Comment added",
-    });
-  } catch (e) {
-    console.error("Error fetching comments:", e);
-    return res.status(500).json({ error: "Error saving comments" });
-  }
-});
+  }));
 
 //* Router for the replies of the comments
 router.post(
   "/:id/comments/:commentId/replies",
   verifyToken,
-  async (req, res) => {
+  wrapAsync(async (req, res) => {
     if (!req.dbAvailable) {
       return res.status(503).json({ ok: false, error: "Database not available" });
     }
@@ -366,11 +369,11 @@ router.post(
       console.error("Error adding reply:", e);
       return res.status(500).json({ success: false, error: "Server error" });
     }
-  }
+  })
 );
 
 //* Teacher creates an activity
-router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
+router.post("/create", verifyToken, upload.single("file"), wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -420,10 +423,10 @@ router.post("/create", verifyToken, upload.single("file"), async (req, res) => {
       .status(500)
       .json({ success: false, error: "Internal server error" });
   }
-});
+}));
 
 //* List activities for a classroom (student or teacher)
-router.get("/classroom/:code", verifyToken, async (req, res) => {
+router.get("/classroom/:code", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -473,6 +476,6 @@ router.get("/classroom/:code", verifyToken, async (req, res) => {
       .status(500)
       .json({ success: false, error: "Internal server error" });
   }
-});
+}));
 
 export default router;

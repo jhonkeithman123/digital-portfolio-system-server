@@ -1,6 +1,6 @@
 import express from "express";
 import { queryAsync } from "../config/helpers/dbHelper.js";
-import db from "../config/db.js";
+import wrapAsync from "../utils/wrapAsync.js";
 
 const router = express.Router();
 
@@ -17,11 +17,10 @@ router.post(
   }
 );
 
-router.post("/tamper-log", express.json(), async (req, res) => {
+router.post("/tamper-log", express.json(), wrapAsync(async (req, res) => {
     if (!req.dbAvailable) {
       return res.status(503).json({ ok: false, error: "Database not available" });
     }
-  
   const { type, detectedAt, role, userId } = req.body;
   const logMessage = `Tampering detected at ${new Date(
     detectedAt
@@ -37,6 +36,6 @@ router.post("/tamper-log", express.json(), async (req, res) => {
     console.error("Failed to log tampering:", err);
     return res.status(500).json({ error: "Failed to log tampering" });
   }
-});
+}));
 
 export default router;

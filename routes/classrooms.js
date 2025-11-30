@@ -4,12 +4,13 @@ import dotenv from "dotenv";
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
 import generateCode from "../config/code_generator.js";
+import wrapAsync from "../utils/wrapAsync.js";
 
 dotenv.config();
 const router = express.Router();
 
 //* Checks if the student is already in the classroom
-router.get("/student", verifyToken, async (req, res) => {
+router.get("/student", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -57,10 +58,10 @@ router.get("/student", verifyToken, async (req, res) => {
     console.error("Error checking students in the database:", error.message);
     return res.status(500).json({ error: "Internal server error" });
   }
-});
+}));
 
 //* Checks if the teacher already has a classroom
-router.get("/teacher", verifyToken, async (req, res) => {
+router.get("/teacher", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -91,9 +92,9 @@ router.get("/teacher", verifyToken, async (req, res) => {
     console.error("Error checking teacher status:", err.message);
     return res.status(500).json({ error: "Internal server error" });
   }
-});
+}));
 
-router.post("/create", verifyToken, async (req, res) => {
+router.post("/create", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -119,9 +120,9 @@ router.post("/create", verifyToken, async (req, res) => {
     console.error("Error creating classroom:", err);
     res.status(500).json({ success: false, error: "Database error" });
   }
-});
+}));
 
-router.patch("/teacher/section", verifyToken, async (req, res) => {
+router.patch("/teacher/section", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -175,10 +176,10 @@ router.patch("/teacher/section", verifyToken, async (req, res) => {
       .status(500)
       .json({ success: false, error: "Internal server error" });
   }
-});
+}));
 
 //* Get students not already invited/accepted for a classroom
-router.get("/:code/students", verifyToken, async (req, res) => {
+router.get("/:code/students", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -215,9 +216,9 @@ router.get("/:code/students", verifyToken, async (req, res) => {
     console.error("Error fetching students:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
+}));
 
-router.post("/:code/invite", verifyToken, async (req, res) => {
+router.post("/:code/invite", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -274,9 +275,9 @@ router.post("/:code/invite", verifyToken, async (req, res) => {
     console.error("Error inviting student:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
+}));
 
-router.get("/invites", verifyToken, async (req, res) => {
+router.get("/invites", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -307,9 +308,9 @@ router.get("/invites", verifyToken, async (req, res) => {
     console.error("Error fetching invites:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
+}));
 
-router.post("/invites/:inviteId/hide", verifyToken, async (req, res) => {
+router.post("/invites/:inviteId/hide", verifyToken, wrapAsync(async (req, res) => {
   const { inviteId } = req.params;
   const studentId = req.user.id;
 
@@ -323,9 +324,9 @@ router.post("/invites/:inviteId/hide", verifyToken, async (req, res) => {
     console.error("Error hiding invite:", err);
     res.status(500).json({ success: false, error: "Server error" });
   }
-});
+}));
 
-router.post("/invites/:inviteId/accept", verifyToken, async (req, res) => {
+router.post("/invites/:inviteId/accept", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -358,9 +359,9 @@ router.post("/invites/:inviteId/accept", verifyToken, async (req, res) => {
     console.error("Error accepting invite:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
+}));
 
-router.post("/join", verifyToken, async (req, res) => {
+router.post("/join", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -439,6 +440,6 @@ router.post("/join", verifyToken, async (req, res) => {
     }
     res.status(500).json({ success: false, error: "Failed to join classroom" });
   }
-});
+}));
 
 export default router;

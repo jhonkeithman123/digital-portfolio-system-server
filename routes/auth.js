@@ -23,80 +23,101 @@ dotenv.config();
 
 const router = express.Router();
 
-router.get("/session", verifyToken, async (req, res) => {
-  const userId = req.user.id;
+router.get(
+  "/session",
+  wrapAsync(async (req, res) => {
+    console.info(`[AUTH] GET /session entered ${new Date().toISOString()} ip=${req.ip}`);
+    const userId = req.user.id;
 
-  try {
-    const user = await findOneUserBy("id", userId, [
-      "id",
-      "username",
-      "email",
-      "role",
-      "section",
-    ]);
+    try {
+      const user = await findOneUserBy("id", userId, [
+        "id",
+        "username",
+        "email",
+        "role",
+        "section",
+      ]);
 
-    if (!user) {
-      console.error("User not found");
-      return res.status(404).json({ error: "User not found." });
+      if (!user) {
+        console.info("[AUTH] GET /session user not found", { userId });
+        return res.status(404).json({ error: "User not found." });
+      }
+
+      console.info("[AUTH] GET /session responding", { userId });
+      res.json({ success: true, user });
+    } catch (err) {
+      console.error("[AUTH] GET /session error:", err?.stack || err);
+      return res.status(500).json({ error: "Internal server error." });
     }
-
-    res.json({ success: true, user });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
+  })
+);
 
 // Current user's profile (includes section)
-router.get("/me", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  try {
-    const [user] = await queryAsync(
-      "SELECT id, username AS name, email, role, section FROM users WHERE id = ?",
-      [req.user.id]
-    );
-    if (!user)
-      return res.status(404).json({ success: false, message: "Not found" });
-    res.json({ success: true, user });
-  } catch (e) {
-    console.error("GET /auth/me error:", e.message);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
+router.get(
+  "/me",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    console.info(`[AUTH] GET /me entered ${new Date().toISOString()} ip=${req.ip}`);
+    if (!req.dbAvailable) {
+      console.info("[AUTH] GET /me DB unavailable");
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+
+    try {
+      const [user] = await queryAsync(
+        "SELECT id, username AS name, email, role, section FROM users WHERE id = ?",
+        [req.user.id]
+      );
+      if (!user) {
+        console.info("[AUTH] GET /me not found", { userId: req.user.id });
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
+      console.info("[AUTH] GET /me responding", { userId: req.user.id });
+      res.json({ success: true, user });
+    } catch (e) {
+      console.error("[AUTH] GET /me error:", e?.stack || e);
+      return res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  })
+);
 
 // Student can set their section ONLY if it is currently NULL/empty
-router.patch("/me/section", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
+router.patch(
+  "/me/section",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    console.info(`[AUTH] PATCH /me/section entered ${new Date().toISOString()} ip=${req.ip}`);
+    if (!req.dbAvailable) {
+      console.info("[AUTH] PATCH /me/section DB unavailable");
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
 
-  try {
-    if (req.user.role !== "student") {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+    try {
+      if (req.user.role !== "student") {
+        console.info("[AUTH] PATCH /me/section forbidden - not student", { role: req.user.role });
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+      const section = (req.body?.section ?? "").toString().trim();
+      if (!section) {
+        console.info("[AUTH] PATCH /me/section bad request - missing section");
+        return res.status(400).json({ success: false, message: "Section is required" });
+      }
+      const result = await queryAsync(
+        "UPDATE users SET section = ? WHERE id = ? AND role = 'student' AND (section IS NULL OR section = '')",
+        [section, req.user.id]
+      );
+      if (!result?.affectedRows) {
+        console.info("[AUTH] PATCH /me/section no-op - already set", { userId: req.user.id });
+        return res.json({ success: false, message: "Section already set" });
+      }
+      console.info("[AUTH] PATCH /me/section updated", { userId: req.user.id, section });
+      res.json({ success: true, section });
+    } catch (e) {
+      console.error("[AUTH] PATCH /me/section error:", e?.stack || e);
+      return res.status(500).json({ success: false, message: "Internal server error" });
     }
-    const section = (req.body?.section ?? "").toString().trim();
-    if (!section) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Section is required" });
-    }
-    // Update only when section is NULL or empty
-    const result = await queryAsync(
-      "UPDATE users SET section = ? WHERE id = ? AND role = 'student' AND (section IS NULL OR section = '')",
-      [section, req.user.id]
-    );
-    if (!result?.affectedRows) {
-      return res.json({ success: false, message: "Section already set" });
-    }
-    res.json({ success: true, section });
-  } catch (e) {
-    console.error("PATCH /auth/me/section error:", e.message);
-    res.status(500).json({ success: false, message: "Internal server error" });
-  }
-});
+  })
+);
 
 router.get("/ping", verifyToken, (req, res) => {
   if (!req.dbAvailable) {
@@ -227,135 +248,147 @@ router.post("/signup", wrapAsync(async (req, res) => {
   }
 }));
 
-router.post("/request-verification", async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const { email, role } = req.body;
-
-  if (!email || !role) {
-    return res.status(400).json({ error: "Email and role are required." });
-  }
-
-  const normEmail = email.toLowerCase();
-
-  try {
-    const user = await findOneUserBy("email", normEmail);
-    if (!user || user.role !== role) {
-      console.warn(
-        `[NOT FOUND] no user found for ${normEmail} with role ${role}`
-      );
-      return res.status(404).json({ error: "User not found." });
+router.post(
+  "/request-verification",
+  wrapAsync(async (req, res) => {
+    console.info(`[AUTH] request-verification entered ${new Date().toISOString()} ip=${req.ip} bodyPreview=${JSON.stringify({ email: req.body?.email, role: req.body?.role }).slice(0,200)}`);
+    if (!req.dbAvailable) {
+      console.info("[AUTH] request-verification DB unavailable");
+      return res.status(503).json({ ok: false, error: "Database not available" });
     }
 
-    const { code, expiry, formatted, shouldUpdate } =
-      generateVerificationCode(user);
+    const { email, role } = req.body;
+    if (!email || !role) {
+      console.info("[AUTH] request-verification bad request - missing fields");
+      return res.status(400).json({ error: "Email and role are required." });
+    }
 
-    if (shouldUpdate) {
+    const normEmail = email.toLowerCase();
+
+    try {
+      const user = await findOneUserBy("email", normEmail);
+      if (!user || user.role !== role) {
+        console.warn(`[AUTH] request-verification user not found ${normEmail} role=${role}`);
+        return res.status(404).json({ error: "User not found." });
+      }
+
+      const { code, expiry, formatted, shouldUpdate } = generateVerificationCode(user);
+
+      if (shouldUpdate) {
+        await updateRecord(
+          "users",
+          {
+            verification_code: code,
+            verification_expiry: expiry,
+          },
+          {
+            email: normEmail,
+          }
+        );
+        await sendVerificationEmail(normEmail, code, formatted);
+        console.info(`[AUTH] request-verification email sent to ${normEmail}`);
+        return res.json({
+          success: true,
+          message: "Verification code sent to your email.",
+        });
+      } else {
+        console.info(`[AUTH] request-verification code active for ${normEmail} until ${formatted}`);
+        return res.json({
+          success: true,
+          message: `A verification is already active. Please check your email. It expires at ${formatted}.`,
+        });
+      }
+    } catch (error) {
+      console.error("[AUTH] request-verification error:", error?.stack || error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  })
+);
+
+router.post(
+  "/verify-code",
+  wrapAsync(async (req, res) => {
+    console.info(`[AUTH] verify-code entered ${new Date().toISOString()} ip=${req.ip} bodyPreview=${JSON.stringify({ email: req.body?.email }).slice(0,200)}`);
+    if (!req.dbAvailable) {
+      console.info("[AUTH] verify-code DB unavailable");
+      return res.status(503).json({ ok: false, error: "Database not available" });
+    }
+
+    const { email, code } = req.body;
+    const normEmail = (email || "").toLowerCase();
+
+    try {
+      const user = await findOneUserBy("email", normEmail);
+      if (!user) {
+        console.info("[AUTH] verify-code user not found", { email: normEmail });
+        return res.status(404).json({ error: "User not found." });
+      }
+
+      if (!isVerificationCodeValid(user, code)) {
+        console.info("[AUTH] verify-code invalid/expired", { email: normEmail });
+        return res.status(400).json({ error: "Invalid or expired code." });
+      }
+
       await updateRecord(
         "users",
         {
-          verification_code: code,
-          verification_expiry: expiry,
+          is_verified: 1,
+          verification_code: null,
+          verification_expiry: null,
         },
         {
           email: normEmail,
         }
       );
-      await sendVerificationEmail(normEmail, code, formatted);
-      console.log(
-        `[EMAIL SENT] Code sent to ${normEmail} (expires at ${formatted})`
-      );
-      return res.json({
-        success: true,
-        message: "Verification code sent to your email.",
-      });
-    } else {
-      console.log(
-        `[CODE ACTIVE] Code for ${normEmail} still valid untill ${formatted}`
-      );
-      return res.json({
-        success: true,
-        message: `A verification is already active. Please check your email. It expires at ${formatted}.`,
-      });
+
+      console.info("[AUTH] verify-code success", { email: normEmail });
+      res.json({ success: true, message: "Email is verified." });
+    } catch (error) {
+      console.error("[AUTH] verify-code error:", error?.stack || error);
+      return res.status(500).json({ error: "Internal server error" });
     }
-  } catch (error) {
-    console.error("[ERROR] Verifiaction request failed:", error.message);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
-router.post("/verify-code", async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const { email, code } = req.body;
-  const normEmail = email.toLowerCase();
-
-  try {
-    const user = await findOneUserBy("email", normEmail);
-    if (!user) {
-      console.log("User not found.");
-      return res.status(404).json({ error: "User not found." });
+router.patch(
+  "/reset-password",
+  wrapAsync(async (req, res) => {
+    console.info(`[AUTH] reset-password entered ${new Date().toISOString()} ip=${req.ip} bodyPreview=${JSON.stringify({ email: req.body?.email }).slice(0,200)}`);
+    if (!req.dbAvailable) {
+      console.info("[AUTH] reset-password DB unavailable");
+      return res.status(503).json({ ok: false, error: "Database not available" });
     }
 
-    if (!isVerificationCodeValid(user, code))
-      return res.status(400).json({ error: "Invalid or expired code." });
+    const { email, newPassword } = req.body;
+    const normEmail = (email || "").toLowerCase();
 
-    await updateRecord(
-      "users",
-      {
-        is_verified: 1,
-        verification_code: null,
-        verification_expiry: null,
-      },
-      {
-        email: normEmail,
+    try {
+      const user = await findOneUserBy("email", normEmail);
+      if (!user || user.is_verified !== 1) {
+        console.info("[AUTH] reset-password user not found or not verified", { email: normEmail });
+        return res.status(404).json({ error: "User not found or not verified." });
       }
-    );
 
-    res.json({ success: true, message: "Email is verified." });
-  } catch (error) {
-    console.error("Verification error:", error.message);
-    return res.status(500).json({ error: "Internal server error." });
-  }
-});
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-router.patch("/reset-password", async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const { email, newPassword } = req.body;
-  const normEmail = email.toLowerCase();
+      await updateRecord(
+        "users",
+        {
+          password: hashedPassword,
+          is_verified: 0,
+        },
+        {
+          email: normEmail,
+        }
+      );
 
-  try {
-    const user = await findOneUserBy("email", normEmail);
-    if (!user || user.is_verified !== 1) {
-      console.log("User not found or not verified.");
-      return res.status(404).json({ error: "User not found or not verified." });
+      console.info("[AUTH] reset-password success", { email: normEmail });
+      res.json({ success: true, message: "Password updated successfully" });
+    } catch (err) {
+      console.error("[AUTH] reset-password error:", err?.stack || err);
+      return res.status(500).json({ error: "Internal server error." });
     }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    await updateRecord(
-      "users",
-      {
-        password: hashedPassword,
-        is_verified: 0,
-      },
-      {
-        email: normEmail,
-      }
-    );
-
-    res.json({ success: true, message: "Password updated successfully" });
-  } catch (err) {
-    console.error("[reset-password] Error:", err.message);
-    return res.status(500).json({ error: "Internal server error." });
-  }
-});
+  })
+);
 
 export default router;

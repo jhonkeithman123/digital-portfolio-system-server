@@ -1,10 +1,11 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
+import wrapAsync from "../utils/wrapAsync.js";
 
 const router = express.Router();
 
-router.get("/notifications", verifyToken, async (req, res) => {
+router.get("/notifications", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -25,9 +26,9 @@ router.get("/notifications", verifyToken, async (req, res) => {
       .status(500)
       .json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
-router.post("/notifications/:id/read", verifyToken, async (req, res) => {
+router.post("/notifications/:id/read", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -44,10 +45,10 @@ router.post("/notifications/:id/read", verifyToken, async (req, res) => {
       .status(500)
       .json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
 // Mark ALL current user's notifications as read
-router.post("/notifications/mark-all-read", verifyToken, async (req, res) => {
+router.post("/notifications/mark-all-read", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -62,10 +63,10 @@ router.post("/notifications/mark-all-read", verifyToken, async (req, res) => {
     console.error("mark-all-read error", err.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
 // Batch mark selected IDs (owned by user) as read
-router.post("/notifications/read-batch", verifyToken, async (req, res) => {
+router.post("/notifications/read-batch", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -84,9 +85,9 @@ router.post("/notifications/read-batch", verifyToken, async (req, res) => {
     console.error("read-batch error", err.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
-router.get("/users/sections", verifyToken, async (req, res) => {
+router.get("/users/sections", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -99,10 +100,10 @@ router.get("/users/sections", verifyToken, async (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
 // Students list (optionally only those missing section)
-router.get("/users/students", verifyToken, async (req, res) => {
+router.get("/users/students", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -125,10 +126,10 @@ router.get("/users/students", verifyToken, async (req, res) => {
     console.error("GET /users/students error:", e.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
 // Update a single student's section
-router.patch("/users/:id/section", verifyToken, async (req, res) => {
+router.patch("/users/:id/section", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -151,6 +152,6 @@ router.patch("/users/:id/section", verifyToken, async (req, res) => {
     console.error("PATCH /users/:id/section error:", e.message);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
-});
+}));
 
 export default router;

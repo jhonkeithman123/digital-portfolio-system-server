@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
+import wrapAsync from "../utils/wrapAsync.js";
 
 const router = express.Router();
 
@@ -83,69 +84,253 @@ const parseQuestions = (raw) => {
   }
 };
 
-router.get("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
+router
+  .route("/:code/quizzes/:quizId")
+    .all(verifyToken)
+    .get(wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
+        return res.status(503).json({ ok: false, error: "Database not available" });
+      }
 
-  const { code, quizId } = req.params;
-  const userId = req.user.id;
-  const role = req.user.role;
+      const { code, quizId } = req.params;
+      const userId = req.user.id;
+      const role = req.user.role;
 
-  try {
-    const rows = await queryAsync(
-      `SELECT q.*, c.teacher_id
-       FROM quizzes q
-       JOIN classrooms c ON q.classroom_id = c.id
-       WHERE c.code = ? AND q.id = ? LIMIT 1`,
-      [code, quizId]
-    );
-    if (!rows.length)
-      return res
-        .status(404)
-        .json({ success: false, message: "Quiz not found" });
+      try {
+        const rows = await queryAsync(
+          `SELECT q.*, c.teacher_id
+          FROM quizzes q
+          JOIN classrooms c ON q.classroom_id = c.id
+          WHERE c.code = ? AND q.id = ? LIMIT 1`,
+          [code, quizId]
+        );
+        if (!rows.length)
+          return res
+            .status(404)
+            .json({ success: false, message: "Quiz not found" });
 
-    const qz = rows[0];
-    const isOwner = role === "teacher" && qz.teacher_id === userId;
+        const qz = rows[0];
+        const isOwner = role === "teacher" && qz.teacher_id === userId;
 
-    // load normalized pages
-    const pages = await loadPages(qz.id);
-    const raw = { pages };
-    const questions = isOwner ? raw : redactAnswersDeep(raw);
+        // load normalized pages
+        const pages = await loadPages(qz.id);
+        const raw = { pages };
+        const questions = isOwner ? raw : redactAnswersDeep(raw);
 
-    // compute how many attempts this user has already used for this quiz
-    const arows = await queryAsync(
-      "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
-      [qz.id, userId]
-    );
-    const attempts_used = arows[0]?.cnt || 0;
-    const attempts_remaining =
-      qz.attempts_allowed != null
-        ? Math.max(0, qz.attempts_allowed - attempts_used)
-        : null;
+        // compute how many attempts this user has already used for this quiz
+        const arows = await queryAsync(
+          "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
+          [qz.id, userId]
+        );
+        const attempts_used = arows[0]?.cnt || 0;
+        const attempts_remaining =
+          qz.attempts_allowed != null
+            ? Math.max(0, qz.attempts_allowed - attempts_used)
+            : null;
 
-    res.json({
-      success: true,
-      quiz: {
-        id: qz.id,
-        title: qz.title,
-        start_time: qz.start_time,
-        end_time: qz.end_time,
-        time_limit_seconds: qz.time_limit_seconds,
-        attempts_allowed: qz.attempts_allowed,
-        attempts_used,
-        attempts_remaining,
-        created_at: qz.created_at,
+        res.json({
+          success: true,
+          quiz: {
+            id: qz.id,
+            title: qz.title,
+            start_time: qz.start_time,
+            end_time: qz.end_time,
+            time_limit_seconds: qz.time_limit_seconds,
+            attempts_allowed: qz.attempts_allowed,
+            attempts_used,
+            attempts_remaining,
+            created_at: qz.created_at,
+            questions,
+          },
+        });
+      } catch (err) {
+        console.error("Error fetching quiz:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+    }))
+    .put(wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
+        return res.status(503).json({ ok: false, error: "Database not available" });
+      }
+      
+      const teacherId = req.user.id;
+      const { code, quizId } = req.params;
+      const {
+        title,
         questions,
-      },
-    });
-  } catch (err) {
-    console.error("Error fetching quiz:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
+        attemptsAllowed = 1,
+        startTime = null,
+        endTime = null,
+        timeLimitSeconds = null,
+      } = req.body;
 
-router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
+      // helpers (same as in create)
+      const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
+      const asInt = (v, d = 0) => {
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? n : d;
+      };
+      const ALLOWED_TYPES = new Set([
+        "multiple_choice",
+        "checkboxes",
+        "short_answer",
+        "paragraph",
+      ]);
+      const makeId = (p, i) => `srv-q-${p}-${Date.now()}-${i}`;
+      const makePageId = (i) => `srv-page-${Date.now()}-${i}`;
+      const sanitizeQuestion = (q, pIdx, qIdx) => {
+        const type = ALLOWED_TYPES.has(q?.type) ? q.type : "multiple_choice";
+        const base = {
+          id: q?.id || makeId(pIdx, qIdx),
+          type,
+          text: String(q?.text ?? "").trim() || "Untitled question",
+        };
+        if (type === "multiple_choice") {
+          const opts = Array.isArray(q?.options)
+            ? q.options.filter((s) => s != null).map(String)
+            : [];
+          const options = opts.length >= 2 ? opts : ["Option 1", "Option 2"];
+          const idx =
+            q?.correctAnswer == null ? null : asInt(q.correctAnswer, null);
+          const correctAnswer =
+            idx != null && idx >= 0 && idx < options.length ? String(idx) : null;
+          return { ...base, options, correctAnswer };
+        }
+        if (type === "checkboxes") {
+          const opts = Array.isArray(q?.options)
+            ? q.options.filter((s) => s != null).map(String)
+            : [];
+          const options = opts.length >= 2 ? opts : ["Option 1", "Option 2"];
+          const set = new Set(
+            Array.isArray(q?.correctAnswer)
+              ? q.correctAnswer
+                  .map((v) => asInt(v, -1))
+                  .filter((n) => n >= 0 && n < options.length)
+              : []
+          );
+          const correctAnswer = Array.from(set.values()).sort((a, b) => a - b);
+          return { ...base, options, correctAnswer };
+        }
+        if (type === "short_answer") {
+          const sentenceLimit = clamp(asInt(q?.sentenceLimit ?? 1, 1), 1, 3);
+          const correctAnswer = String(q?.correctAnswer ?? "");
+          return { ...base, sentenceLimit, correctAnswer };
+        }
+        const sentenceLimit = Math.max(3, asInt(q?.sentenceLimit ?? 3, 3));
+        const correctAnswer = String(q?.correctAnswer ?? "");
+        return { ...base, sentenceLimit, correctAnswer };
+      };
+      const normalizeToPages = (qs) => {
+        if (qs && Array.isArray(qs.pages)) {
+          return qs.pages.map((pg, pIdx) => ({
+            id: pg?.id || makePageId(pIdx),
+            title: String(pg?.title ?? `Page ${pIdx + 1}`),
+            questions: Array.isArray(pg?.questions)
+              ? pg.questions.map((q, qIdx) => sanitizeQuestion(q, pIdx, qIdx))
+              : [],
+          }));
+        }
+        const arr = Array.isArray(qs) ? qs : [];
+        return [
+          {
+            id: makePageId(0),
+            title: "Page 1",
+            questions: arr.map((q, qIdx) => sanitizeQuestion(q, 0, qIdx)),
+          },
+        ];
+      };
+
+      const attempts = clamp(asInt(attemptsAllowed, 1), 1, 100);
+      const tls = (() => {
+        const n = asInt(timeLimitSeconds, 0);
+        return n > 0 ? n : null;
+      })();
+
+      try {
+        // verify ownership and get classroom_id
+        const rows = await queryAsync(
+          `SELECT q.id, q.classroom_id, c.teacher_id
+          FROM quizzes q
+          JOIN classrooms c ON q.classroom_id = c.id
+          WHERE q.id = ? AND c.code = ? LIMIT 1`,
+          [quizId, code]
+        );
+        if (!rows.length)
+          return res
+            .status(404)
+            .json({ success: false, message: "Quiz not found" });
+        if (rows[0].teacher_id !== teacherId)
+          return res
+            .status(403)
+            .json({ success: false, message: "Not authorized" });
+
+        const sanitized = normalizeToPages(questions);
+        const questionJson = JSON.stringify({ pages: sanitized });
+
+        await queryAsync(
+          `UPDATE quizzes
+          SET title = ?, questions = ?, attempts_allowed = ?, start_time = ?, end_time = ?, time_limit_seconds = ?
+          WHERE id = ? AND classroom_id = ? AND teacher_id = ?`,
+          [
+            (String(title || "").trim() || "Untitled Quiz").slice(0, 255),
+            questionJson, // keep old column unused
+            attempts,
+            startTime || null,
+            endTime || null,
+            tls,
+            quizId,
+            rows[0].classroom_id,
+            teacherId,
+          ]
+        );
+
+        // replace pages with the new set
+        await writePages(quizId, sanitized);
+
+        res.json({ success: true, message: "Quiz updated", quizId });
+      } catch (err) {
+        console.error("Error updating quiz:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+    }))
+    .delete(wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
+        return res.status(503).json({ ok: false, error: "Database not available" });
+      }
+      
+      const teacherId = req.user.id;
+      const { code, quizId } = req.params;
+
+      try {
+        const rows = await queryAsync(
+          `SELECT q.id, q.classroom_id, c.teacher_id
+          FROM quizzes q
+          JOIN classrooms c ON q.classroom_id = c.id
+          WHERE q.id = ? AND c.code = ? LIMIT 1`,
+          [quizId, code]
+        );
+
+        if (!rows.length)
+          return res
+            .status(404)
+            .json({ success: false, message: "Quiz not found" });
+        if (rows[0].teacher_id !== teacherId)
+          return res
+            .status(403)
+            .json({ success: false, message: "Not authorized" });
+
+        await queryAsync("DELETE FROM quiz_attempts WHERE quiz_id = ?", [quizId]);
+        await queryAsync("DELETE FROM quiz_pages WHERE quiz_id = ?", [quizId]);
+        await queryAsync("DELETE FROM quizzes WHERE id = ? LIMIT 1", [quizId]);
+
+        res.json({ success: true, message: "Quiz deleted" });
+      } catch (err) {
+        console.error("Error deleting quiz:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+    }));
+
+router.post("/:code/quizzes/create", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -312,192 +497,9 @@ router.post("/:code/quizzes/create", verifyToken, async (req, res) => {
     console.error("Error creating quiz:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
+}));
 
-router.put("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const teacherId = req.user.id;
-  const { code, quizId } = req.params;
-  const {
-    title,
-    questions,
-    attemptsAllowed = 1,
-    startTime = null,
-    endTime = null,
-    timeLimitSeconds = null,
-  } = req.body;
-
-  // helpers (same as in create)
-  const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
-  const asInt = (v, d = 0) => {
-    const n = parseInt(v, 10);
-    return Number.isFinite(n) ? n : d;
-  };
-  const ALLOWED_TYPES = new Set([
-    "multiple_choice",
-    "checkboxes",
-    "short_answer",
-    "paragraph",
-  ]);
-  const makeId = (p, i) => `srv-q-${p}-${Date.now()}-${i}`;
-  const makePageId = (i) => `srv-page-${Date.now()}-${i}`;
-  const sanitizeQuestion = (q, pIdx, qIdx) => {
-    const type = ALLOWED_TYPES.has(q?.type) ? q.type : "multiple_choice";
-    const base = {
-      id: q?.id || makeId(pIdx, qIdx),
-      type,
-      text: String(q?.text ?? "").trim() || "Untitled question",
-    };
-    if (type === "multiple_choice") {
-      const opts = Array.isArray(q?.options)
-        ? q.options.filter((s) => s != null).map(String)
-        : [];
-      const options = opts.length >= 2 ? opts : ["Option 1", "Option 2"];
-      const idx =
-        q?.correctAnswer == null ? null : asInt(q.correctAnswer, null);
-      const correctAnswer =
-        idx != null && idx >= 0 && idx < options.length ? String(idx) : null;
-      return { ...base, options, correctAnswer };
-    }
-    if (type === "checkboxes") {
-      const opts = Array.isArray(q?.options)
-        ? q.options.filter((s) => s != null).map(String)
-        : [];
-      const options = opts.length >= 2 ? opts : ["Option 1", "Option 2"];
-      const set = new Set(
-        Array.isArray(q?.correctAnswer)
-          ? q.correctAnswer
-              .map((v) => asInt(v, -1))
-              .filter((n) => n >= 0 && n < options.length)
-          : []
-      );
-      const correctAnswer = Array.from(set.values()).sort((a, b) => a - b);
-      return { ...base, options, correctAnswer };
-    }
-    if (type === "short_answer") {
-      const sentenceLimit = clamp(asInt(q?.sentenceLimit ?? 1, 1), 1, 3);
-      const correctAnswer = String(q?.correctAnswer ?? "");
-      return { ...base, sentenceLimit, correctAnswer };
-    }
-    const sentenceLimit = Math.max(3, asInt(q?.sentenceLimit ?? 3, 3));
-    const correctAnswer = String(q?.correctAnswer ?? "");
-    return { ...base, sentenceLimit, correctAnswer };
-  };
-  const normalizeToPages = (qs) => {
-    if (qs && Array.isArray(qs.pages)) {
-      return qs.pages.map((pg, pIdx) => ({
-        id: pg?.id || makePageId(pIdx),
-        title: String(pg?.title ?? `Page ${pIdx + 1}`),
-        questions: Array.isArray(pg?.questions)
-          ? pg.questions.map((q, qIdx) => sanitizeQuestion(q, pIdx, qIdx))
-          : [],
-      }));
-    }
-    const arr = Array.isArray(qs) ? qs : [];
-    return [
-      {
-        id: makePageId(0),
-        title: "Page 1",
-        questions: arr.map((q, qIdx) => sanitizeQuestion(q, 0, qIdx)),
-      },
-    ];
-  };
-
-  const attempts = clamp(asInt(attemptsAllowed, 1), 1, 100);
-  const tls = (() => {
-    const n = asInt(timeLimitSeconds, 0);
-    return n > 0 ? n : null;
-  })();
-
-  try {
-    // verify ownership and get classroom_id
-    const rows = await queryAsync(
-      `SELECT q.id, q.classroom_id, c.teacher_id
-       FROM quizzes q
-       JOIN classrooms c ON q.classroom_id = c.id
-       WHERE q.id = ? AND c.code = ? LIMIT 1`,
-      [quizId, code]
-    );
-    if (!rows.length)
-      return res
-        .status(404)
-        .json({ success: false, message: "Quiz not found" });
-    if (rows[0].teacher_id !== teacherId)
-      return res
-        .status(403)
-        .json({ success: false, message: "Not authorized" });
-
-    const sanitized = normalizeToPages(questions);
-    const questionJson = JSON.stringify({ pages: sanitized });
-
-    await queryAsync(
-      `UPDATE quizzes
-       SET title = ?, questions = ?, attempts_allowed = ?, start_time = ?, end_time = ?, time_limit_seconds = ?
-       WHERE id = ? AND classroom_id = ? AND teacher_id = ?`,
-      [
-        (String(title || "").trim() || "Untitled Quiz").slice(0, 255),
-        questionJson, // keep old column unused
-        attempts,
-        startTime || null,
-        endTime || null,
-        tls,
-        quizId,
-        rows[0].classroom_id,
-        teacherId,
-      ]
-    );
-
-    // replace pages with the new set
-    await writePages(quizId, sanitized);
-
-    res.json({ success: true, message: "Quiz updated", quizId });
-  } catch (err) {
-    console.error("Error updating quiz:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-router.delete("/:code/quizzes/:quizId", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const teacherId = req.user.id;
-  const { code, quizId } = req.params;
-
-  try {
-    const rows = await queryAsync(
-      `SELECT q.id, q.classroom_id, c.teacher_id
-       FROM quizzes q
-       JOIN classrooms c ON q.classroom_id = c.id
-       WHERE q.id = ? AND c.code = ? LIMIT 1`,
-      [quizId, code]
-    );
-
-    if (!rows.length)
-      return res
-        .status(404)
-        .json({ success: false, message: "Quiz not found" });
-    if (rows[0].teacher_id !== teacherId)
-      return res
-        .status(403)
-        .json({ success: false, message: "Not authorized" });
-
-    await queryAsync("DELETE FROM quiz_attempts WHERE quiz_id = ?", [quizId]);
-    await queryAsync("DELETE FROM quiz_pages WHERE quiz_id = ?", [quizId]);
-    await queryAsync("DELETE FROM quizzes WHERE id = ? LIMIT 1", [quizId]);
-
-    res.json({ success: true, message: "Quiz deleted" });
-  } catch (err) {
-    console.error("Error deleting quiz:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-router.get("/:code/quizzes", verifyToken, async (req, res) => {
+router.get("/:code/quizzes", verifyToken, wrapAsync(async (req, res) => {
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -521,74 +523,173 @@ router.get("/:code/quizzes", verifyToken, async (req, res) => {
     console.error("Error listing quizzes:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
-});
+}));
 
-router.post("/:code/quizzes/:quizId/attempt", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const { code, quizId } = req.params;
-  const studentId = req.user.id;
+router
+  .route("/:code/quizzes/:quizId/attempts")
+  .all(verifyToken)
+  //* GET attempts for a quiz (teacher-only). ?status=needs_grading|completed|in_progress|all
+    .get(wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
+        return res.status(503).json({ ok: false, error: "Database not available" });
+      }
+      
+      const { code, quizId } = req.params;
+      const { status = "needs_grading" } = req.query; // default to needs_grading
+      const requesterId = req.user.id;
+      const role = req.user.role;
 
-  try {
-    const rows = await queryAsync(
-      `SELECT q.*, c.id as classroom_id, c.teacher_id
-       FROM quizzes q
-       JOIN classrooms c ON q.classroom_id = c.id
-       WHERE c.code = ? AND q.id = ? LIMIT 1`,
-      [code, quizId]
-    );
-    if (!rows.length)
-      return res
-        .status(404)
-        .json({ success: false, message: "Quiz not found" });
+      try {
+        // ensure the quiz exists and belongs to this teacher (or allow teacher access)
+        const qrows = await queryAsync(
+          `SELECT q.*, c.teacher_id
+          FROM quizzes q
+          JOIN classrooms c ON q.classroom_id = c.id
+          WHERE c.code = ? AND q.id = ? LIMIT 1`,
+          [code, quizId]
+        );
+        if (!qrows.length)
+          return res
+            .status(404)
+            .json({ success: false, message: "Quiz not found" });
+        const quiz = qrows[0];
 
-    const quiz = rows[0];
+        if (role !== "teacher" || quiz.teacher_id !== requesterId) {
+          return res.status(403).json({ success: false, message: "Forbidden" });
+        }
 
-    // check attempts used
-    const arows = await queryAsync(
-      "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
-      [quizId, studentId]
-    );
-    const used = arows[0]?.cnt || 0;
-    if (quiz.attempts_allowed != null && used >= quiz.attempts_allowed) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No attempts remaining" });
-    }
+        const allowedStatuses = [
+          "needs_grading",
+          "completed",
+          "in_progress",
+          "all",
+        ];
+        const st = allowedStatuses.includes(status) ? status : "needs_grading";
 
-    const nextAttemptNo = used + 1;
-    const startedAt = new Date();
-    let expiresAt = null;
-    if (quiz.time_limit_seconds) {
-      expiresAt = new Date(
-        startedAt.getTime() + quiz.time_limit_seconds * 1000
-      );
-    }
+        let whereClause = "1=1";
+        const params = [quizId];
+        if (st !== "all") {
+          whereClause = "qa.status = ?";
+          params.unshift(st); // will be processed below in query construction
+          // but easier: we'll build query differently
+        }
 
-    await queryAsync(
-      `INSERT INTO quiz_attempts (quiz_id, student_id, attempt_no, answers, score, status, started_at, submitted_at, expires_at)
-       VALUES (?, ?, ?, ?, NULL, 'in_progress', ?, NULL, ?)`,
-      [
-        quizId,
-        studentId,
-        nextAttemptNo,
-        JSON.stringify({}),
-        startedAt,
-        expiresAt,
-      ]
-    );
+        // build query
+        let sql = `
+          SELECT qa.*, u.id as student_id, u.username as student_username, u.username as student_name
+          FROM quiz_attempts qa
+          JOIN users u ON u.id = qa.student_id
+          WHERE qa.quiz_id = ?
+        `;
+        const sqlParams = [quizId];
+        if (st !== "all") {
+          sql += " AND qa.status = ?";
+          sqlParams.push(st);
+        }
+        sql += " ORDER BY qa.id DESC LIMIT 200";
 
-    const idRow = await queryAsync("SELECT LAST_INSERT_ID() as id");
-    const attemptId = idRow[0]?.id || null;
+        const attempts = await queryAsync(sql, sqlParams);
 
-    res.json({ success: true, attemptId, attemptNo: nextAttemptNo, expiresAt });
-  } catch (err) {
-    console.error("Error starting attempt:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
+        // parse JSON fields safely
+        const out = attempts.map((a) => ({
+          id: a.id,
+          quiz_id: a.quiz_id,
+          student_id: a.student_id,
+          student_name: a.student_name || a.student_username,
+          attempt_no: a.attempt_no,
+          status: a.status,
+          score: a.score,
+          answers: (() => {
+            try {
+              return JSON.parse(a.answers || "{}");
+            } catch {
+              return {};
+            }
+          })(),
+          started_at: a.started_at,
+          submitted_at: a.submitted_at,
+          expires_at: a.expires_at,
+          grading: (() => {
+            try {
+              return JSON.parse(a.grading || "{}");
+            } catch {
+              return {};
+            }
+          })(),
+        }));
+
+        res.json({ success: true, attempts: out });
+      } catch (err) {
+        console.error("Error listing attempts:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+    }))
+    .post(wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
+        return res.status(503).json({ ok: false, error: "Database not available" });
+      }
+      
+      const { code, quizId } = req.params;
+      const studentId = req.user.id;
+
+      try {
+        const rows = await queryAsync(
+          `SELECT q.*, c.id as classroom_id, c.teacher_id
+          FROM quizzes q
+          JOIN classrooms c ON q.classroom_id = c.id
+          WHERE c.code = ? AND q.id = ? LIMIT 1`,
+          [code, quizId]
+        );
+        if (!rows.length)
+          return res
+            .status(404)
+            .json({ success: false, message: "Quiz not found" });
+
+        const quiz = rows[0];
+
+        // check attempts used
+        const arows = await queryAsync(
+          "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
+          [quizId, studentId]
+        );
+        const used = arows[0]?.cnt || 0;
+        if (quiz.attempts_allowed != null && used >= quiz.attempts_allowed) {
+          return res
+            .status(400)
+            .json({ success: false, message: "No attempts remaining" });
+        }
+
+        const nextAttemptNo = used + 1;
+        const startedAt = new Date();
+        let expiresAt = null;
+        if (quiz.time_limit_seconds) {
+          expiresAt = new Date(
+            startedAt.getTime() + quiz.time_limit_seconds * 1000
+          );
+        }
+
+        await queryAsync(
+          `INSERT INTO quiz_attempts (quiz_id, student_id, attempt_no, answers, score, status, started_at, submitted_at, expires_at)
+          VALUES (?, ?, ?, ?, NULL, 'in_progress', ?, NULL, ?)`,
+          [
+            quizId,
+            studentId,
+            nextAttemptNo,
+            JSON.stringify({}),
+            startedAt,
+            expiresAt,
+          ]
+        );
+
+        const idRow = await queryAsync("SELECT LAST_INSERT_ID() as id");
+        const attemptId = idRow[0]?.id || null;
+
+        res.json({ success: true, attemptId, attemptNo: nextAttemptNo, expiresAt });
+      } catch (err) {
+        console.error("Error starting attempt:", err);
+        res.status(500).json({ success: false, message: "Server error" });
+      }
+    }));
 
 router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
   if (!req.dbAvailable) {
@@ -653,108 +754,12 @@ router.post("/:code/quizzes/:quizId/submit", verifyToken, async (req, res) => {
   }
 });
 
-// GET attempts for a quiz (teacher-only). ?status=needs_grading|completed|in_progress|all
-router.get("/:code/quizzes/:quizId/attempts", verifyToken, async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const { code, quizId } = req.params;
-  const { status = "needs_grading" } = req.query; // default to needs_grading
-  const requesterId = req.user.id;
-  const role = req.user.role;
-
-  try {
-    // ensure the quiz exists and belongs to this teacher (or allow teacher access)
-    const qrows = await queryAsync(
-      `SELECT q.*, c.teacher_id
-       FROM quizzes q
-       JOIN classrooms c ON q.classroom_id = c.id
-       WHERE c.code = ? AND q.id = ? LIMIT 1`,
-      [code, quizId]
-    );
-    if (!qrows.length)
-      return res
-        .status(404)
-        .json({ success: false, message: "Quiz not found" });
-    const quiz = qrows[0];
-
-    if (role !== "teacher" || quiz.teacher_id !== requesterId) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-
-    const allowedStatuses = [
-      "needs_grading",
-      "completed",
-      "in_progress",
-      "all",
-    ];
-    const st = allowedStatuses.includes(status) ? status : "needs_grading";
-
-    let whereClause = "1=1";
-    const params = [quizId];
-    if (st !== "all") {
-      whereClause = "qa.status = ?";
-      params.unshift(st); // will be processed below in query construction
-      // but easier: we'll build query differently
-    }
-
-    // build query
-    let sql = `
-      SELECT qa.*, u.id as student_id, u.username as student_username, u.username as student_name
-      FROM quiz_attempts qa
-      JOIN users u ON u.id = qa.student_id
-      WHERE qa.quiz_id = ?
-    `;
-    const sqlParams = [quizId];
-    if (st !== "all") {
-      sql += " AND qa.status = ?";
-      sqlParams.push(st);
-    }
-    sql += " ORDER BY qa.id DESC LIMIT 200";
-
-    const attempts = await queryAsync(sql, sqlParams);
-
-    // parse JSON fields safely
-    const out = attempts.map((a) => ({
-      id: a.id,
-      quiz_id: a.quiz_id,
-      student_id: a.student_id,
-      student_name: a.student_name || a.student_username,
-      attempt_no: a.attempt_no,
-      status: a.status,
-      score: a.score,
-      answers: (() => {
-        try {
-          return JSON.parse(a.answers || "{}");
-        } catch {
-          return {};
-        }
-      })(),
-      started_at: a.started_at,
-      submitted_at: a.submitted_at,
-      expires_at: a.expires_at,
-      grading: (() => {
-        try {
-          return JSON.parse(a.grading || "{}");
-        } catch {
-          return {};
-        }
-      })(),
-    }));
-
-    res.json({ success: true, attempts: out });
-  } catch (err) {
-    console.error("Error listing attempts:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
 
 // PATCH grade a specific attempt (teacher-only): { score: number (0-100), grading: object, comment: string }
 router.patch(
   "/:code/quizzes/:quizId/attempts/:attemptId/grade",
   verifyToken,
-  async (req, res) => {
+  wrapAsync(async (req, res) => {
     if (!req.dbAvailable) {
       return res.status(503).json({ ok: false, error: "Database not available" });
     }
@@ -817,7 +822,7 @@ router.patch(
       console.error("Error grading attempt:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  })
 );
 
 // ----------------- end new routes -----------------
