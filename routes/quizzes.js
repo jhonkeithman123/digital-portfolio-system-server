@@ -509,14 +509,41 @@ router.get("/:code/quizzes", verifyToken, wrapAsync(async (req, res) => {
   try {
     const rows = await queryAsync(
       `SELECT q.id, q.title, q.start_time, q.end_time, q.time_limit_seconds, q.attempts_allowed, q.created_at, u.username AS teacherName,
-              (SELECT COUNT(*) FROM quiz_pages p WHERE p.quiz_id = q.id) AS pages_count,
-              (SELECT COALESCE(SUM(JSON_LENGTH(JSON_EXTRACT(p.content_json, '$.questions'))),0) FROM quiz_pages p WHERE p.quiz_id = q.id) AS questions_count
+              (SELECT COUNT(*) FROM quiz_pages p WHERE p.quiz_id = q.id) AS pages_count
        FROM quizzes q
        JOIN classrooms c ON q.classroom_id = c.id
        LEFT JOIN users u ON q.teacher_id = u.id
        WHERE c.code = ?`,
       [code]
     );
+
+    // compute questions_count by parsing quiz_pages.content_json in JS
+    for (const r of rows) {
+      try {
+        const pages = await queryAsync(
+          "SELECT content_json FROM quiz_pages WHERE quiz_id = ?",
+          [r.id]
+        );
+        let questions_count = 0;
+        for (const p of pages) {
+          try {
+            const parsed =
+              typeof p.content_json === "string"
+                ? JSON.parse(p.content_json || "{}")
+                : p.content_json || {};
+            if (Array.isArray(parsed.questions)) {
+              questions_count += parsed.questions.length;
+            }
+          } catch (e) {
+            // ignore parse errors per-page
+          }
+        }
+        r.questions_count = questions_count;
+      } catch (e) {
+        // on failure, fall back to zero
+        r.questions_count = 0;
+      }
+    }
 
     res.json({ success: true, quizzes: rows });
   } catch (err) {
