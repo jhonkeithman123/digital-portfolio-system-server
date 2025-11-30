@@ -4,6 +4,7 @@ import multer from "multer";
 import wrapAsync from "../utils/wrapAsync.js";
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
+import { type } from "os";
 
 const router = express.Router();
 
@@ -595,6 +596,120 @@ router.patch(
       });
     } catch (e) {
       console.error("Error updatid instructions:", e);
+      return res.status(500).json({ success: false, error: "Server error" });
+    }
+  })
+);
+
+router.patch(
+  "/:id/comments/:commentId",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    if (!req.dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database not available" });
+    }
+
+    const { id, commentId } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
+    const { comment } = req.body;
+
+    try {
+      // basic validation
+      if (typeof comment !== "string") {
+        return res
+          .status(400)
+          .json({ success: false, error: "Invalid comment" });
+      }
+      const trimmed = comment.trim();
+      if (!trimmed) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Comment cannot be empty" });
+      }
+      const safe = trimmed.slice(0, 255);
+
+      // authorize activity access
+      const auth = await authorizeActivity(id, userId, role);
+      if (!auth.ok) {
+        const status = auth.reason === "Activity not found" ? 404 : 403;
+        return res.status(status).json({ success: false, error: auth.reason });
+      }
+
+      // Try update as top-level comment first
+      const commentRows = await queryAsync(
+        `SELECT id, user_id FROM comments WHERE id = ? AND activity_id = ? LIMIT 1`,
+        [commentId, id]
+      );
+
+      if (commentRows.length) {
+        const existing = commentRows[0];
+        if (existing.user_id !== userId) {
+          return res.status(403).json({ success: false, error: "Forbidden" });
+        }
+
+        // update
+        await queryAsync(
+          `UPDATE comments SET comment = ?, updated_at = NOW(), edited = 1 WHERE id = ?`,
+          [safe, commentId]
+        );
+
+        const updated = await queryAsync(
+          `SELECT c.id, c.activity_id, c.classroom_id, c.user_id, c.comment, c.created_at, c.updated_at c.edited, u.username, u.role
+          FROM comments c
+          JOIN users u ON u.id = c.user_id
+          WHERE c.id = ? LIMIT 1`,
+          [commentId]
+        );
+
+        return res.json({
+          success: true,
+          type: "comment",
+          comment: updated[0],
+          message: "Comment updated",
+        });
+      }
+
+      //* Not a top-level comment - try as a reply
+      const replyRows = await queryAsync(
+        `SELECT r.id, r.comment_id, r.user_id, r.reply, r.created_at, r.updated_at, r.edited, c.activity_id, c.classroom_id
+         FROM comment_replies r
+         JOIN comments c ON c.id = r.comment_id
+         WHERE r.id = ? AND c.activity_id = ? LIMIT 1`,
+        [commentId, id]
+      );
+
+      if (replyRows.length) {
+        const existingReply = replyRows[0];
+        if (existingReply.user_id !== userId) {
+          return res.status(403).json({ success: false, error: "Forbidden" });
+        }
+
+        await queryAsync(
+          `UPDATE comment_replies SET reply = ?, updated_at = NOW(), edited = 1 WHERE id = ?`,
+          [safe, commentId]
+        );
+
+        const updatedReply = await queryAsync(
+          `SELECT r.id, r.comment_id, c.activity_id, c.classroom_id, r.user_id, r.reply, r.created_at, r.updated_at, r.edited, u.username, u.role
+           FROM comment_replies r
+           JOIN comments c ON c.id = r.comment_id
+           JOIN users u ON u.id = r.user_id
+           WHERE r.id = ? LIMIT 1`,
+          [commentId]
+        );
+
+        return res.json({
+          success: true,
+          type: "reply",
+          reply: updatedReply[0],
+          message: "Reply updated",
+        });
+      }
+    } catch (e) {
+      console.error("Error updating comment:", e);
       return res.status(500).json({ success: false, error: "Server error" });
     }
   })
