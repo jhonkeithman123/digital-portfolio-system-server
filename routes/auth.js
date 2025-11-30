@@ -185,28 +185,33 @@ router.post("/logout", (req, res) => {
   return res.json({ success: true });
 });
 
-router.post("/signup", async (req, res) => {
+router.post("/signup", wrapAsync(async (req, res) => {
+  console.info(`[AUTH] signup entered ${new Date().toISOString()} ip=${req.ip} bodyPreview=${JSON.stringify({ email: req.body?.email, name: req.body?.name, role: req.body?.role }).slice(0,300)}`);
   if (!req.dbAvailable) {
+    console.info("[AUTH] DB unavailable - aborting signup");
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
-  
-  const { name, email, password, role, section } = req.body;
 
-  const normedEmail = email.toLowerCase();
+  const { name, email, password, role, section } = req.body || {};
+  if (!name || !email || !password || !role) {
+    console.info("[AUTH] signup validation failed - missing fields");
+    return res.status(400).json({ error: "name, email, password and role are required." });
+  }
+
+  const normedEmail = (email || "").toLowerCase();
   const sectionVal = section ? section.trim() : null;
 
   try {
+    console.info("[AUTH] signup - checking existing email/username");
     const existingEmail = await findOneUserBy("email", normedEmail);
-    if (existingEmail)
-      return res.status(409).json({ error: "Email already registered." });
+    if (existingEmail) return res.status(409).json({ error: "Email already registered." });
 
     const existingUsername = await findOneUserBy("username", name);
-    if (existingUsername)
-      return res.status(409).json({ error: "Username already exists." });
+    if (existingUsername) return res.status(409).json({ error: "Username already exists." });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    await insertRecord("users", {
+    const insertId = await insertRecord("users", {
       username: name,
       email: normedEmail,
       password: hashedPassword,
@@ -214,12 +219,13 @@ router.post("/signup", async (req, res) => {
       section: sectionVal,
     });
 
-    res.json({ success: true, message: "Successfully created user." });
+    console.info("[AUTH] signup created user", { insertId, email: normedEmail });
+    return res.json({ success: true, message: "Successfully created user.", id: insertId });
   } catch (error) {
-    console.error("Signup Error:", error.message);
+    console.error("[AUTH] Signup Error:", error?.stack || error);
     return res.status(500).json({ error: "Internal Server Error." });
   }
-});
+}));
 
 router.post("/request-verification", async (req, res) => {
   if (!req.dbAvailable) {
