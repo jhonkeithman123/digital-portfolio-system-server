@@ -4,11 +4,13 @@ dotenv.config();
 export const AUTH_COOKIE_NAME =
   process.env.NODE_ENV === "production" ? "_HOST-token" : "token";
 export const isProd = process.env.NODE_ENV === "production";
-const sameSiteMode = isProd ? "strict" : "lax";
 
-export const baseCookieOptions = {
+const sameSiteMode = isProd ? "none" : "lax";
+const secureFlag = isProd;
+
+const baseCookieOptions = {
   httpOnly: true,
-  secure: isProd,
+  secure: secureFlag,
   sameSite: sameSiteMode,
   path: "/",
 };
