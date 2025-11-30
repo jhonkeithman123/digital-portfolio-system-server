@@ -30,8 +30,8 @@ router.get(
     const userId = req.user.id;
 
     try {
-      const user = await findOneUserBy("id", userId, [
-        "id",
+      const user = await findOneUserBy("ID", userId, [
+        "ID",
         "username",
         "email",
         "role",
