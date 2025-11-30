@@ -1,4 +1,4 @@
-import express from "express";
+import express, { query } from "express";
 import path from "path";
 import multer from "multer";
 import wrapAsync from "../utils/wrapAsync.js";
@@ -76,26 +76,31 @@ async function authorizeActivity(activityId, userId, role) {
 }
 
 //* Router to get activities
-router.get("/:id", verifyToken, wrapAsync(async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
-  const { id } = req.params;
-  const userId = req.user.id;
-  const role = req.user.role;
-
-  console.log("userId", userId, "Id", id);
-
-  try {
-    const auth = await authorizeActivity(id, userId, role);
-    if (!auth.ok) {
-      const status = auth.reason === "Activity not found" ? 404 : 403;
-      return res.status(status).json({ success: false, error: auth.reason });
+router.get(
+  "/:id",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    if (!req.dbAvailable) {
+      return res
+        .status(503)
+        .json({ ok: false, error: "Database not available" });
     }
 
-    const rows = await queryAsync(
-      `SELECT a.id,
+    const { id } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
+
+    console.log("userId", userId, "Id", id);
+
+    try {
+      const auth = await authorizeActivity(id, userId, role);
+      if (!auth.ok) {
+        const status = auth.reason === "Activity not found" ? 404 : 403;
+        return res.status(status).json({ success: false, error: auth.reason });
+      }
+
+      const rows = await queryAsync(
+        `SELECT a.id,
               a.classroom_id,
               a.teacher_id,
               a.title,
@@ -109,71 +114,77 @@ router.get("/:id", verifyToken, wrapAsync(async (req, res) => {
       JOIN classrooms c ON c.id = a.classroom_id
       WHERE a.id = ?
       LIMIT 1`,
-      [id]
-    );
+        [id]
+      );
 
-    if (!rows.length) {
-      return res.status(404).json({ success: false, error: "Not found" });
-    }
-
-    const activity = rows[0];
-
-    //* Authorize Access:
-    //* - Teacher must own the classroom
-    //* - Student: must be accepted member of the classroom
-    if (role === "teacher") {
-      if (activity.teacher_id !== userId) {
-        return res
-          .status(403)
-          .json({ success: false, error: "Forbidden for this activity" });
+      if (!rows.length) {
+        return res.status(404).json({ success: false, error: "Not found" });
       }
-    } else {
-      const memberRows = await queryAsync(
-        `SELECT 1
+
+      const activity = rows[0];
+
+      //* Authorize Access:
+      //* - Teacher must own the classroom
+      //* - Student: must be accepted member of the classroom
+      if (role === "teacher") {
+        if (activity.teacher_id !== userId) {
+          return res
+            .status(403)
+            .json({ success: false, error: "Forbidden for this activity" });
+        }
+      } else {
+        const memberRows = await queryAsync(
+          `SELECT 1
          FROM classroom_members
          WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
          LIMIT 1`,
-        [activity.classroom_id, userId]
-      );
+          [activity.classroom_id, userId]
+        );
 
-      if (!memberRows.length) {
-        return res
-          .status(403)
-          .json({ success: false, error: "Forbidden for this activity" });
+        if (!memberRows.length) {
+          return res
+            .status(403)
+            .json({ success: false, error: "Forbidden for this activity" });
+        }
       }
-    }
 
-    return res.json({ success: true, activity });
-  } catch (e) {
-    console.error("Error fetching activity:", e);
-    res.status(500).json({ error: "Server error" });
-  }
-}));
+      return res.json({ success: true, activity });
+    } catch (e) {
+      console.error("Error fetching activity:", e);
+      res.status(500).json({ error: "Server error" });
+    }
+  })
+);
 
 router
   .route("/:id/comments")
   .all(verifyToken)
   //* Router to get comments
-  .get(wrapAsync(async (req, res) => { 
-    if (!req.dbAvailable) {
-      return res.status(503).json({ ok: false, error: "Database not available" });
-    }
-
-    const { id } = req.params;
-    const userId = req.user.id;
-    const role = req.user.role;
-
-    try {
-      //* Auth
-      const auth = await authorizeActivity(id, userId, role);
-      if (!auth.ok) {
-        const status = auth.reason === "Activity not found" ? 404 : 403;
-        return res.status(status).json({ success: false, error: auth.reason });
+  .get(
+    wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
+        return res
+          .status(503)
+          .json({ ok: false, error: "Database not available" });
       }
 
-      //* Fetch comments (oldest first)
-      const comments = await queryAsync(
-        `SELECT c.id,
+      const { id } = req.params;
+      const userId = req.user.id;
+      const role = req.user.role;
+
+      try {
+        //* Auth
+        const auth = await authorizeActivity(id, userId, role);
+        if (!auth.ok) {
+          const status = auth.reason === "Activity not found" ? 404 : 403;
+          return res
+            .status(status)
+            .json({ success: false, error: auth.reason });
+        }
+
+        //* Fetch comments (oldest first)
+        const comments = await queryAsync(
+          `SELECT c.id,
                 c.activity_id,
                 c.classroom_id,
                 c.user_id,
@@ -186,14 +197,14 @@ router
          JOIN users u ON u.ID = c.user_id
          WHERE c.activity_id = ? AND c.classroom_id = ?
          ORDER BY c.created_at ASC`,
-        [id, auth.activity.classroom_id]
-      );
+          [id, auth.activity.classroom_id]
+        );
 
-      let repliesByComment = {};
-      if (comments.length) {
-        const ids = comments.map((c) => c.id);
-        const replies = await queryAsync(
-          `SELECT r.id,
+        let repliesByComment = {};
+        if (comments.length) {
+          const ids = comments.map((c) => c.id);
+          const replies = await queryAsync(
+            `SELECT r.id,
                   r.comment_id,
                   r.user_id,
                   r.reply,
@@ -205,67 +216,73 @@ router
            JOIN users u ON u.ID = r.user_id
            WHERE r.comment_id IN (?)
            ORDER BY r.created_at ASC`,
-          [ids]
-        );
-        replies.forEach((r) => {
-          (repliesByComment[r.comment_id] ||= []).push(r);
-        });
+            [ids]
+          );
+          replies.forEach((r) => {
+            (repliesByComment[r.comment_id] ||= []).push(r);
+          });
+        }
+
+        const payload = comments.map((c) => ({
+          ...c,
+          replies: repliesByComment[c.id] ?? [],
+        }));
+
+        return res.json({ success: true, comments: payload });
+      } catch (e) {
+        console.error("Error fetching comments:", e);
+        return res.status(500).json({ error: "Error fetching comments" });
       }
-
-      const payload = comments.map((c) => ({
-        ...c,
-        replies: repliesByComment[c.id] ?? [],
-      }));
-
-      return res.json({ success: true, comments: payload });
-    } catch (e) {
-      console.error("Error fetching comments:", e);
-      return res.status(500).json({ error: "Error fetching comments" });
-    }
-  }))
+    })
+  )
   //* Router to modify the comments
-  .post(wrapAsync(async (req, res) => { 
-    if (!req.dbAvailable) {
-      return res.status(503).json({ ok: false, error: "Database not available" });
-    }
-
-    const { id } = req.params;
-    const userId = req.user.id;
-    const role = req.user.role;
-    const { comment } = req.body;
-
-    try {
-      const auth = await authorizeActivity(id, userId, role);
-      if (!auth.ok) {
-        const status = auth.reason === "Activity not found" ? 404 : 403;
-        return res.status(status).json({ success: false, error: auth.reason });
-      }
-
-      //* Validate comment
-      if (typeof comment !== "string") {
+  .post(
+    wrapAsync(async (req, res) => {
+      if (!req.dbAvailable) {
         return res
-          .status(400)
-          .json({ success: false, error: "Comment text are required" });
+          .status(503)
+          .json({ ok: false, error: "Database not available" });
       }
 
-      //* Check if the comment is an empty string
-      const trimmed = comment.trim();
-      if (!trimmed.length) {
-        return res
-          .status(400)
-          .json({ success: false, error: "Comments cannot be empty" });
-      }
-      const safe = trimmed.slice(0, 255); //* Enforce column length
+      const { id } = req.params;
+      const userId = req.user.id;
+      const role = req.user.role;
+      const { comment } = req.body;
 
-      const result = await queryAsync(
-        `INSERT INTO comments
+      try {
+        const auth = await authorizeActivity(id, userId, role);
+        if (!auth.ok) {
+          const status = auth.reason === "Activity not found" ? 404 : 403;
+          return res
+            .status(status)
+            .json({ success: false, error: auth.reason });
+        }
+
+        //* Validate comment
+        if (typeof comment !== "string") {
+          return res
+            .status(400)
+            .json({ success: false, error: "Comment text are required" });
+        }
+
+        //* Check if the comment is an empty string
+        const trimmed = comment.trim();
+        if (!trimmed.length) {
+          return res
+            .status(400)
+            .json({ success: false, error: "Comments cannot be empty" });
+        }
+        const safe = trimmed.slice(0, 255); //* Enforce column length
+
+        const result = await queryAsync(
+          `INSERT INTO comments
               (classroom_id, activity_id, user_id, comment, created_at, updated_at)
          VALUES (?, ?, ?, ?, NOW(), NOW())`,
-        [auth.activity.classroom_id, id, userId, safe]
-      );
+          [auth.activity.classroom_id, id, userId, safe]
+        );
 
-      const inserted = await queryAsync(
-        `SELECT c.id,
+        const inserted = await queryAsync(
+          `SELECT c.id,
                 c.activity_id,
                 c.classroom_id,
                 c.user_id,
@@ -278,19 +295,20 @@ router
          JOIN users u ON u.ID = c.user_id
          WHERE c.id = ?
          LIMIT 1`,
-        [result.insertId]
-      );
+          [result.insertId]
+        );
 
-      return res.json({
-        success: true,
-        comments: { ...inserted[0], replies: [] },
-        message: "Comment added",
-      });
-    } catch (e) {
-      console.error("Error fetching comments:", e);
-      return res.status(500).json({ error: "Error saving comments" });
-    }
-  }));
+        return res.json({
+          success: true,
+          comments: { ...inserted[0], replies: [] },
+          message: "Comment added",
+        });
+      } catch (e) {
+        console.error("Error fetching comments:", e);
+        return res.status(500).json({ error: "Error saving comments" });
+      }
+    })
+  );
 
 //* Router for the replies of the comments
 router.post(
@@ -298,9 +316,11 @@ router.post(
   verifyToken,
   wrapAsync(async (req, res) => {
     if (!req.dbAvailable) {
-      return res.status(503).json({ ok: false, error: "Database not available" });
+      return res
+        .status(503)
+        .json({ ok: false, error: "Database not available" });
     }
-    
+
     const { id, commentId } = req.params;
     const userId = req.user.id;
     const role = req.user.role;
@@ -373,109 +393,211 @@ router.post(
 );
 
 //* Teacher creates an activity
-router.post("/create", verifyToken, upload.single("file"), wrapAsync(async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  try {
-    if (req.user.role !== "teacher")
-      return res.status(403).json({ success: false, error: "Forbidden" });
-
-    const { title, instructions, classroomCode } = req.body;
-    if (!title || !instructions || !classroomCode) {
+router.post(
+  "/create",
+  verifyToken,
+  upload.single("file"),
+  wrapAsync(async (req, res) => {
+    if (!req.dbAvailable) {
       return res
-        .status(400)
-        .json({ success: false, error: "Missing required fields" });
+        .status(503)
+        .json({ ok: false, error: "Database not available" });
     }
 
-    const classroom = await getClassroomForTeacher(classroomCode, req.user.id);
-    if (!classroom)
-      return res
-        .status(403)
-        .json({ success: false, error: "Invalid classroom code" });
+    try {
+      if (req.user.role !== "teacher")
+        return res.status(403).json({ success: false, error: "Forbidden" });
 
-    const file = req.file || null;
+      const { title, instructions, classroomCode } = req.body;
+      if (!title || !instructions || !classroomCode) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Missing required fields" });
+      }
 
-    const result = await queryAsync(
-      `INSERT INTO activities
+      const classroom = await getClassroomForTeacher(
+        classroomCode,
+        req.user.id
+      );
+      if (!classroom)
+        return res
+          .status(403)
+          .json({ success: false, error: "Invalid classroom code" });
+
+      const file = req.file || null;
+
+      const result = await queryAsync(
+        `INSERT INTO activities
           (classroom_id, teacher_id, title, instructions, file_path, original_name, mime_type)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        classroom.id,
-        req.user.id,
-        title.trim(),
-        instructions.trim(),
-        file ? file.filename : null,
-        file ? file.originalname : null,
-        file ? file.mimetype : null,
-      ]
-    );
+        [
+          classroom.id,
+          req.user.id,
+          title.trim(),
+          instructions.trim(),
+          file ? file.filename : null,
+          file ? file.originalname : null,
+          file ? file.mimetype : null,
+        ]
+      );
 
-    return res.json({
-      success: true,
-      id: result.insertId,
-      message: "Activity created",
-    });
-  } catch (err) {
-    console.error("Error creating activity:", err);
-    return res
-      .status(500)
-      .json({ success: false, error: "Internal server error" });
-  }
-}));
+      return res.json({
+        success: true,
+        id: result.insertId,
+        message: "Activity created",
+      });
+    } catch (err) {
+      console.error("Error creating activity:", err);
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  })
+);
 
 //* List activities for a classroom (student or teacher)
-router.get("/classroom/:code", verifyToken, wrapAsync(async (req, res) => {
-  if (!req.dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-  
-  const { code } = req.params;
-  const userId = req.user.id;
-  const role = req.user.role;
+router.get(
+  "/classroom/:code",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    if (!req.dbAvailable) {
+      return res
+        .status(503)
+        .json({ ok: false, error: "Database not available" });
+    }
 
-  try {
-    // Validate classroom access
-    let classroomRow;
-    if (role === "teacher") {
-      const rows = await queryAsync(
-        "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
-        [code, userId]
-      );
-      classroomRow = rows[0];
-    } else {
-      const rows = await queryAsync(
-        `SELECT c.id
+    const { code } = req.params;
+    const userId = req.user.id;
+    const role = req.user.role;
+
+    try {
+      // Validate classroom access
+      let classroomRow;
+      if (role === "teacher") {
+        const rows = await queryAsync(
+          "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
+          [code, userId]
+        );
+        classroomRow = rows[0];
+      } else {
+        const rows = await queryAsync(
+          `SELECT c.id
          FROM classrooms c
          JOIN classroom_members cm ON cm.classroom_id = c.id
          WHERE c.code = ? AND cm.student_id = ? AND cm.status = 'accepted'
          LIMIT 1`,
-        [code, userId]
-      );
-      classroomRow = rows[0];
-    }
+          [code, userId]
+        );
+        classroomRow = rows[0];
+      }
 
-    if (!classroomRow)
-      return res
-        .status(403)
-        .json({ success: false, error: "Not authorized for this classroom" });
+      if (!classroomRow)
+        return res
+          .status(403)
+          .json({ success: false, error: "Not authorized for this classroom" });
 
-    const activities = await queryAsync(
-      `SELECT id, title, instructions, file_path, original_name, mime_type, created_at
+      const activities = await queryAsync(
+        `SELECT id, title, instructions, file_path, original_name, mime_type, created_at
        FROM activities
        WHERE classroom_id = ?
        ORDER BY created_at DESC`,
-      [classroomRow.id]
-    );
+        [classroomRow.id]
+      );
 
-    return res.json({ success: true, activities });
-  } catch (err) {
-    console.error("Error listing activities:", err);
-    return res
-      .status(500)
-      .json({ success: false, error: "Internal server error" });
-  }
-}));
+      return res.json({ success: true, activities });
+    } catch (err) {
+      console.error("Error listing activities:", err);
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  })
+);
+
+router.patch(
+  "/:id/instructions",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    if (!req.dbAvailable) {
+      console.error("DB unavailable");
+      return res
+        .status(500)
+        .json({ success: false, error: "Database not available" });
+    }
+
+    const { id } = req.params;
+    const { instructions } = req.body;
+    const userId = req.user.id;
+    const role = req.user.role;
+
+    try {
+      if (role !== "teacher") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      //* Ensure activity exists and teacher owns it
+      const actRows = await queryAsync(
+        `SELECT id, teacher_id, classroom_id
+       FROM activities
+       WHERE id = ?
+       LIMIT 1`,
+        [id]
+      );
+
+      if (!actRows.length) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Activity not found" });
+      }
+
+      const activity = actRows[0];
+      if (activity.teacher_id !== userId) {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      //* validate input
+      if (typeof instructions !== "string") {
+        return res
+          .status(400)
+          .json({ success: false, error: "Invalid instructions" });
+      }
+
+      const trimmed = instructions.trim();
+      if (trimmed.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, error: "Instructions cannot be empty" });
+      }
+
+      //* Enforcing a 10000 characters max length to avoid huge payloads
+      const safe = trimmed.slice(0, 10000);
+
+      //* persist update
+      await queryAsync(
+        `UPDATE activities
+       SET instructions = ?, updated_at = NOW()
+       WHERE id = ?`,
+        [safe, id]
+      );
+
+      const updated = await queryAsync(
+        `SELECT id, title, instructions, file_path, original_name, mime_type, updated_at
+       FROM activities
+       WHERE id = ?
+       LIMIT 1`,
+        [id]
+      );
+
+      return res.json({
+        success: true,
+        message: "Instructions updated",
+        activity: updated[0] || { id, instructions: safe },
+      });
+    } catch (e) {
+      console.error("Error updatid instructions:", e);
+      return res.status(500).json({ success: false, error: "Server error" });
+    }
+  })
+);
 
 export default router;
