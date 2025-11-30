@@ -17,20 +17,6 @@ import db from "./config/db.js";
 dotenv.config();
 
 const app = express();
-// --- ADDED: log small preview of request bodies for POST/PUT/PATCH to help debug hangs/crashes ---
-app.use((req, res, next) => {
-  if (["POST", "PUT", "PATCH"].includes(req.method)) {
-    try {
-      // limit output length to avoid huge logs and avoid logging secrets in prod
-      const preview = JSON.stringify(req.body || {}).slice(0, 1000);
-      console.info(`[REQ BODY] ${new Date().toISOString()} ${req.ip} ${req.method} ${req.originalUrl} body=${preview}`);
-    } catch (e) {
-      // ignore stringify errors
-    }
-  }
-  next();
-});
-
 app.set("trust proxy", 1);
 
 const client_url = process.env.CLIENT_ORIGIN || "http://digital-portfolio-system-client.vercel.app";
@@ -85,6 +71,20 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+
+// --- ADDED: log small preview of request bodies for POST/PUT/PATCH to help debug hangs/crashes ---
+app.use((req, res, next) => {
+  if (["POST", "PUT", "PATCH"].includes(req.method)) {
+    try {
+      // limit output length to avoid huge logs and avoid logging secrets in prod
+      const preview = JSON.stringify(req.body || {}).slice(0, 1000);
+      console.info(`[REQ BODY] ${new Date().toISOString()} ${req.ip} ${req.method} ${req.originalUrl} body=${preview}`);
+    } catch (e) {
+      // ignore stringify errors
+    }
+  }
+  next();
+});
 
 app.use(
   helmet({

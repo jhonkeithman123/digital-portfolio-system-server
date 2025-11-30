@@ -109,41 +109,60 @@ router.get("/ping", verifyToken, (req, res) => {
 router.post("/login", wrapAsync(async (req, res) => {
   console.info(`[AUTH] login entered ${new Date().toISOString()} ip=${req.ip} bodyPreview=${JSON.stringify({ email: req.body?.email, role: req.body?.role }).slice(0,300)}`);
   if (!req.dbAvailable) {
+    console.info("[AUTH] DB unavailable - aborting login");
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
 
   const { email, password, role: intendedRole } = req.body;
-
-  const normEmail = email.toLowerCase();
+  const normEmail = (email || "").toLowerCase();
 
   try {
+    console.info("[AUTH] findOneUserBy start", normEmail);
     const user = await findOneUserBy("email", normEmail);
-    if (!user) return res.status(404).json({ error: "User not found" });
+    console.info("[AUTH] findOneUserBy done", !!user);
 
-    if (user.role !== intendedRole) {
-      console.log("Unauthorized Access Blocked.");
-      return res
-        .status(403)
-        .json({ error: `Access denied for ${intendedRole} portal` });
+    if (!user) {
+      console.info("[AUTH] user not found");
+      return res.status(404).json({ error: "User not found" });
     }
 
+    if (user.role !== intendedRole) {
+      console.info("[AUTH] role mismatch", { dbRole: user.role, intendedRole });
+      return res.status(403).json({ error: `Access denied for ${intendedRole} portal` });
+    }
+
+    console.info("[AUTH] bcrypt.compare start");
     const match = await bcrypt.compare(password, user.password);
+    console.info("[AUTH] bcrypt.compare done", { match });
+
     if (!match) return res.status(401).json({ error: "Invalid password" });
 
+    console.info("[AUTH] generateToken start");
     const { token, expiresAt } = generateToken(
-      { id: user.ID, role: user.role },
+      { id: user.ID ?? user.id, role: user.role },
       "2h"
     );
-    await createSession(user.ID, token, expiresAt);
+    console.info("[AUTH] generateToken done", { tokenExists: !!token });
+
+    // helper to fail DB session creation if it hangs
+    const promiseWithTimeout = (p, ms, label) =>
+      Promise.race([
+        p,
+        new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timed out after ${ms}ms`)), ms)),
+      ]);
+
+    console.info("[AUTH] createSession start");
+    // 8s timeout for createSession (adjust as needed)
+    await promiseWithTimeout(createSession(user.ID ?? user.id, token, expiresAt), 8000, "createSession");
+    console.info("[AUTH] createSession done");
 
     setAuthCookie(res, token);
-
     console.info(`[AUTH] login responding ${new Date().toISOString()} ip=${req.ip}`);
-    
+
     return res.json({
       success: true,
       user: {
-        id: user.ID,
+        id: user.ID ?? user.id,
         name: user.username,
         role: user.role,
         email: user.email,
@@ -151,7 +170,7 @@ router.post("/login", wrapAsync(async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error.message);
+    console.error("[AUTH] Login error:", error?.stack || error?.message || error);
     return res.status(500).json({ error: "Internal server error" });
   }
 }));
