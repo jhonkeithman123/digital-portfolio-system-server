@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import { setAuthCookie, clearAuthCookie } from "../utils/authCookies.js";
+import wrapAsync from "../utils/wrapAsync.js";
 
 import { verifyToken } from "../middleware/auth.js";
 import { sendVerificationEmail } from "../config/sendVerificationEmail.js";
@@ -105,7 +106,8 @@ router.get("/ping", verifyToken, (req, res) => {
   return res.json({ success: true, userId: req.user.id });
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", wrapAsync(async (req, res) => {
+  console.info(`[AUTH] login entered ${new Date().toISOString()} ip=${req.ip} bodyPreview=${JSON.stringify({ email: req.body?.email, role: req.body?.role }).slice(0,300)}`);
   if (!req.dbAvailable) {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
@@ -136,7 +138,9 @@ router.post("/login", async (req, res) => {
 
     setAuthCookie(res, token);
 
-    res.json({
+    console.info(`[AUTH] login responding ${new Date().toISOString()} ip=${req.ip}`);
+    
+    return res.json({
       success: true,
       user: {
         id: user.ID,
@@ -150,7 +154,7 @@ router.post("/login", async (req, res) => {
     console.error("Login error:", error.message);
     return res.status(500).json({ error: "Internal server error" });
   }
-});
+}));
 
 // Logout: clear cookie (and let client clear local storage if it uses it)
 router.post("/logout", (req, res) => {
