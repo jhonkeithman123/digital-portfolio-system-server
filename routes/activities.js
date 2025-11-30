@@ -1,10 +1,9 @@
-import express, { query } from "express";
+import express from "express";
 import path from "path";
 import multer from "multer";
 import wrapAsync from "../utils/wrapAsync.js";
 import { verifyToken } from "../middleware/auth.js";
 import { queryAsync } from "../config/helpers/dbHelper.js";
-import { type } from "os";
 
 const router = express.Router();
 
