@@ -72,16 +72,22 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
-// --- ADDED: log small preview of request bodies for POST/PUT/PATCH to help debug hangs/crashes ---
+// Normalize token sources so verifyToken can read Authorization consistently
 app.use((req, res, next) => {
-  if (["POST", "PUT", "PATCH"].includes(req.method)) {
-    try {
-      // limit output length to avoid huge logs and avoid logging secrets in prod
-      const preview = JSON.stringify(req.body || {}).slice(0, 1000);
-      console.info(`[REQ BODY] ${new Date().toISOString()} ${req.ip} ${req.method} ${req.originalUrl} body=${preview}`);
-    } catch (e) {
-      // ignore stringify errors
+  try {
+    // if Authorization header already present, keep it
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader || String(authHeader).trim() === "") {
+      // try cookie named 'token'
+      if (req.cookies && req.cookies.token) {
+        req.headers.authorization = `Bearer ${req.cookies.token}`;
+      } else if (req.query && req.query.token) {
+        // allow ?token=... for special clients
+        req.headers.authorization = `Bearer ${String(req.query.token)}`;
+      }
     }
+  } catch (e) {
+    // ignore
   }
   next();
 });
