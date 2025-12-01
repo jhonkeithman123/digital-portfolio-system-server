@@ -1,83 +1,125 @@
 # Server — Feature Summary & Operational Notes
 
-This document describes notable server features, safety checks and operational guidance for the Digital Portfolio System backend.
+This file describes key server features and simple how-to notes for the Digital Portfolio backend.
 
 ## Quick overview
 
-- Express-based API with focused routes:
-  - /auth, /classrooms, /quizzes, /activity, /security, /api (submissions), plus a docs landing page (`/`).
-- Hardened HTTP surface using helmet (CSP, referrer policy, frame-ancestors, controlled connect-src).
-- CORS whitelist configurable via ALLOWED_ORIGINS / CLIENT_ORIGIN.
-- DB-aware: server works safely when the DB is unavailable (returns 503 where appropriate).
-- Defensive logging and error handling for easier debugging in production.
-- Best-effort compatibility with MySQL variants (avoids server-only JSON functions and START TRANSACTION in prepared statements).
+- Express API with routes like /auth, /classrooms, /quizzes, /activity, /security, /api, and a docs landing page (`/`).
+- Basic hardening via helmet (CSP, referrer policy). Some browser policies are relaxed when needed.
+- CORS list can be set with ALLOWED_ORIGINS or CLIENT_ORIGIN.
+- Server handles missing DB safely (returns 503 where needed).
+- Clear logs and error handling to help debugging.
 
 ---
 
 ## Main features
 
-// ...existing code...
-
 ### Security
 
-- Helmet is configured with a strict Content Security Policy and referrer policy; crossOriginEmbedderPolicy is disabled for compatibility where required.
-- CORS origin checking accepts an explicit origin list and hostname matches (supports non-browser requests with no Origin header).
-- Routes use token verification middleware (`verifyToken`) for protected resources.
+- Helmet provides basic headers (CSP and referrer rules). Some policies are turned off where they break functionality.
+- CORS lets you whitelist specific origins or hostnames.
+- Protected routes use token middleware (`verifyToken`) to check requests.
 
 ### Client-side per-tab session guard (prevent forward-nav reuse)
 
-- Purpose: mitigates an edge case where a user can navigate back to unauthenticated UI (login/role selection) and then press forward to return to a protected page that the browser restores from bfcache or SPA history without re-validating credentials.
-- Implementation (frontend):
-  - A small per-tab marker (sessionStorage key `tabAuth`) is set on successful login and removed when an unauthenticated page (login, signup, role-select, forgot-password) is shown.
-  - Installer `installLoginPageGuard()` is mounted on unauthenticated pages; it clears `tabAuth`, attempts a server-side logout if appropriate, and forces a reload to ensure the auth cookie is cleared for forward navigation.
-  - Protected pages use a reusable restore guard (`useAuthRestoreGuard`) installed centrally in `TokenGuard`. On popstate/pageshow/focus events the guard:
-    - Fast-path: if `tabAuth` is missing, immediately treat the tab as unauthenticated and redirect to login (no network wait).
-    - Otherwise call the server session revalidation (`useTokenStatus.refresh`) which performs a credentials-included GET `/auth/session`.
+- Problem: a user can go back to the login page and then press forward. The browser may restore a protected page from its cache so the user can see it even though they are no longer logged in.
+- What we do:
+  - On login we set a per-tab flag in sessionStorage: `tabAuth`.
+  - When an unauthenticated page (login, signup, role-select, forgot-password) is shown, the app clears `tabAuth` and runs a small guard. The guard can also ask the server to clear the cookie and reload the page.
+  - All protected pages use a single central guard (in TokenGuard). On popstate/pageshow/focus:
+    - If `tabAuth` is missing, we immediately treat the tab as logged out and redirect to /login.
+    - If `tabAuth` is present, we call the backend `/auth/session` to confirm the cookie is still valid.
 - Files:
-  - src/utils/tabAuth.ts — utilities: setTabAuth, removeTabAuth, installLoginPageGuard, useAuthRestoreGuard.
-  - src/components/auth/tokenGuard.tsx — installs the restore guard for all protected routes and triggers revalidation.
-  - Unauthenticated pages call `installLoginPageGuard()` on mount (Login, Signup, RoleSelect, ForgotPassword).
+  - src/utils/tabAuth.ts — set/remove the tab flag, install the login guard, and the restore guard.
+  - src/components/auth/tokenGuard.tsx — installs the restore guard for all protected pages.
+  - Unauthenticated pages mount installLoginPageGuard() on mount (Login, Signup, RoleSelect, ForgotPassword).
 - Why this helps:
-  - sessionStorage is per-tab and synchronous, enabling immediate client-side rejection of forward navigation after the user viewed an unauthenticated page.
-  - pageshow/focus listeners handle bfcache restores where React mount effects might not run.
-- Limitations and notes:
-  - This is a client-side mitigation and does not replace server-side session invalidation. For cross-tab or server-enforced logout, revoke server sessions on logout.
-  - In dev with cross-origin APIs, ensure requests send credentials (or use the Vite proxy) so `/auth/session` calls hit the real backend and cookies are included.
-  - Testing: confirm `tabAuth` behavior in DevTools (Application → sessionStorage) and that GET `/auth/session` returns 401 or success:false when cookie missing.
-- Recommendation: keep the server `/auth/logout` and `/auth/session` behavior authoritative; the tabAuth guard provides fast UX-safe failure and covers bfcache/browser-history edge cases.
+  - sessionStorage is local to each tab and is fast to check. This lets us immediately block forward navigation when the user visited an unauthenticated page.
+  - pageshow/focus listeners handle browser cache cases where React might not re-run mount effects.
+- Limitations:
+  - This is a client-side safety net. It does not replace server-side session invalidation. For full logout across tabs or devices, invalidate sessions on the server.
+  - In development, if API is on another port, make sure requests include credentials or use the Vite proxy so cookies are handled correctly.
 
 ### DB resilience / graceful degradation
 
-- `db.isDbAvailable()` is exposed via the X-DB-Status response header and `req.dbAvailable`.
-- Handlers check `req.dbAvailable` and return 503 when the DB is not ready.
-- Code avoids START TRANSACTION / FOR UPDATE when using mysql2 prepared statement protocol (prepared-statement limitations are handled).
-- When JSON SQL functions are absent (e.g., JSON_LENGTH), the server falls back to parsing JSON in Node — see quizzes listing adjustments.
+- Server exposes DB status via X-DB-Status and req.dbAvailable.
+- Handlers return 503 if the DB is not ready.
+- Some queries avoid advanced JSON SQL functions and compute results in Node if needed.
 
 ### Logging & debugging
 
-- Request start / end logs include timestamp, client IP, method, URL and duration.
-- Small previews of POST/PUT/PATCH request bodies are logged to aid debugging while keeping output bounded.
-- Unhandled errors are caught and logged; the server responds with 500 unless headers already sent.
+- Requests log start and end time, client IP, method and URL.
+- POST/PUT/PATCH bodies are logged in short form to help debugging.
+- Uncaught errors are logged and return 500 unless headers already sent.
 
-### Routes & useful endpoints (high level)
+---
 
-- GET / — browser-friendly landing page with client link and docs link.
-- /auth — authentication endpoints.
-- /classrooms
-  - POST /classrooms/join — join by code (robust against duplicate inserts; no START TRANSACTION).
-  - GET /classrooms/:code/is-member — verifies whether requesting user is member/teacher of a classroom.
-  - GET /classrooms/:code/students, POST /:code/invite, invites management endpoints.
-- /quizzes — listing adjusted to avoid SQL JSON functions; server computes question counts in JS when necessary.
-- /activity — comments, replies, edits; PATCH added to allow comment/reply edits and set `edited` flag.
+## Main functions (what the system does)
 
-### Notifications & client integration
+This section lists the main features the app provides and short notes on current status or improvements needed.
 
-- Notifications are intended to be verified by the backend before the client navigates (e.g., classroom invites are checked via /classrooms/:code/is-member).
-- Frontend Notification menu has been simplified to only navigate to /dash for invite-related notifications, after backend verification.
+### Classroom
 
-### Process resilience
+- Create and manage classrooms (teacher creates a class with a code).
+- Invite students (invite link or code). Invite flow verifies the link with the server before join.
+- Join classroom by code. Server checks duplicates and handles race cases.
+- Manage classroom members (list students, remove, change sections).
+- Needs improvements: pagination for large classes, bulk invite UI, stronger permission checks for certain actions.
 
-- Handlers for `unhandledRejection` and `uncaughtException` log details. The server does not immediately exit on uncaught exceptions to favor diagnostics (adjust if required).
+### Quizzes
+
+- Create quizzes (teacher), list quizzes (student/teacher), take quizzes (student).
+- Support for multiple question types and storing attempts and scores.
+- Teacher can view results and export basic reports.
+- Needs improvements: richer analytics, timed auto-submit, retry rules, and improved UX for large question banks.
+
+### Activities (posts / comments / replies)
+
+- Activity feed for classroom (posts, comments, replies).
+- Students and teachers can post text and simple attachments.
+- Notifications for comments and replies.
+- Needs improvements: moderation tools, richer attachments (images/pdf), and better real-time updates.
+
+### User / Account
+
+- Signup, login, password reset, and account verification flows.
+- Role handling (teacher vs student) and simple profile data.
+- Session management via httpOnly cookie and /auth/session endpoint.
+- Needs improvements: email rate limits, 2FA option, account recovery flows.
+
+### Notifications
+
+- Server-side verification then client navigation for notification links.
+- Unread counts are tracked and shown in the UI.
+- Needs improvements: push notifications and batched notification endpoints.
+
+### Invitations & Links
+
+- Short-lived invite links and codes for classrooms.
+- Server verifies invite before allowing join.
+- Needs improvements: link expiry management UI and revoke option.
+
+### File uploads
+
+- Basic support for attachments in posts and student submissions.
+- Files stored on disk or external storage depending on deploy.
+- Needs improvements: virus scan, storage limits, and direct upload to object storage.
+
+### Search & Filtering
+
+- Search for quizzes, classrooms, and activity posts.
+- Basic filters (by classroom, by date, by section).
+- Needs improvements: full-text search, relevance ranking, and better filter UI.
+
+### Reporting & Exports
+
+- Basic exports (CSV) for quiz results and member lists.
+- Needs improvements: scheduled exports, richer report templates.
+
+### Real-time & State
+
+- Some realtime features via polling; server supports websocket if enabled.
+- Needs improvements: full websocket flow for live quizzes and live updates.
 
 ---
 
@@ -85,62 +127,43 @@ This document describes notable server features, safety checks and operational g
 
 Environment variables
 
-- CLIENT_ORIGIN — default client origin used in helmet connect-src and doc links.
-- ALLOWED_ORIGINS — comma-separated list (full origins or hostnames) allowed by CORS.
+- CLIENT_ORIGIN — client origin used in docs and headers.
+- ALLOWED_ORIGINS — allowed CORS origins (comma separated).
 - PORT — server port.
-- DATABASE\_\* — configured in `config/db.js` (mysql2 pool).
+- DATABASE\_\* — DB config.
 - ACCENT_COLOR — used on landing page.
 
 DB compatibility
 
-- If running MySQL on providers lacking JSON\_\* SQL functions, the server is already prepared: some queries avoid JSON functions and parse JSON in Node.
-- The server avoids `START TRANSACTION` when using mysql2 prepared statement mode to prevent ER_UNSUPPORTED_PS; transactions may still be possible using alternate db client settings or non-prepared protocols if strict transactional behavior is required.
-
-Recommended MySQL behavior
-
-- MySQL 5.7+ or compatible MariaDB with JSON support is ideal. If JSON functions are missing, server-side parsing provides a fallback but be aware of performance tradeoffs.
+- Server supports DBs without JSON functions by doing some work in Node. This may be slower but keeps function.
 
 Health checks
 
-- Use a simple HTTP GET to any protected endpoint; check `X-DB-Status` header for DB availability.
-- Example: curl -I https://your-server/classrooms — inspect X-DB-Status and HTTP status.
+- Use a GET to a protected endpoint and check the X-DB-Status header.
 
 Logging
 
-- Request lifecycle logging is enabled (start/end). For production, forward logs to your log aggregator and adjust verbosity.
+- Request lifecycle logging is on. For production, forward logs to your log system and tune verbosity.
 
 Graceful upgrades & race conditions
 
-- Join classroom flow handles duplicate inserts (ER_DUP_ENTRY) and upgrades pending invites to accepted when necessary.
-- Hidden-invite cleanup is attempted after accept/update but is best-effort — failures are logged.
+- Join classroom flow tolerates duplicate inserts and handles common race cases.
+- Some cleanup tasks are best-effort and will be logged on failure.
 
 ---
 
-## Troubleshooting checklist
+## Troubleshooting checklist (short)
 
-1. 500 from /quizzes shows JSON function error:
-   - Either upgrade DB to support JSON_LENGTH or let the server compute counts in Node (already implemented).
-2. 500 on /classrooms/join with ER_UNSUPPORTED_PS:
-   - The server avoids START TRANSACTION; ensure code does not reintroduce transaction statements while using prepared statements.
-3. Notifications opening invalid links:
-   - Frontend now verifies invite/member state with `/classrooms/:code/is-member` before navigating to `/dash`.
-4. Layout issues (client):
-   - Header publishes CSS variables `--header-height` and `--vh` (ResizeObserver fallback). Ensure header is mounted and variables set.
+1. 404/500 from API endpoints — check env values (API base, ports) and CORS.
+2. Cookies not sent in dev — use Vite proxy or enable credentials with CORS.
+3. Forward-nav to protected page after visiting login — ensure `tabAuth` is cleared on unauth pages and TokenGuard is installed on protected pages.
+4. DB errors about JSON functions — run fallback logic in server or upgrade DB.
 
 ---
 
-## How to run (local dev)
+## Next small improvements
 
-- Install deps: npm ci
-- Configure env (see above).
-- Start: npm run dev (or node server/app.js)
-- Monitor console for `X-DB-Status` and request logs.
-
----
-
-## Recommended next improvements (short list)
-
-- Add a small health endpoint (e.g. GET /health) returning { db: 'available' | 'unavailable', uptime, version }.
-- Add a feature flag or admin toggle to enable stronger transactional semantics when a fully featured DB is guaranteed.
-- Add automated integration tests for classroom join workflows and notification-to-invite verification.
-- Rate-limit sensitive endpoints (e.g., join/invite) and add auditing for invite actions.
+- Add a simple GET /health endpoint returning DB status and uptime.
+- Add a server-side session revoke feature for stronger logout across devices.
+- Add basic rate limits to sensitive endpoints (login, join, invite).
+- Improve classroom, quizzes, and activities features per notes above.
