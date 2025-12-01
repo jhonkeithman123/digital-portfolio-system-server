@@ -543,7 +543,7 @@ router.get(
   "/:code/is-member",
   verifyToken,
   wrapAsync(async (req, res) => {
-    if (req.dbAvailable) {
+    if (!req.dbAvailable) {
       return res
         .status(503)
         .json({ success: false, error: "Database not available" });
