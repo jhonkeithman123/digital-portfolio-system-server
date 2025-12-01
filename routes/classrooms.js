@@ -453,12 +453,10 @@ router.post(
       );
 
       if (memberRows.length && memberRows[0].status === "accepted") {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "Already a member of this classroom",
-          });
+        return res.status(400).json({
+          success: false,
+          error: "Already a member of this classroom",
+        });
       }
 
       if (memberRows.length) {
@@ -537,6 +535,68 @@ router.post(
       res
         .status(500)
         .json({ success: false, error: "Failed to join classroom" });
+    }
+  })
+);
+
+router.get(
+  "/:code/is-member",
+  verifyToken,
+  wrapAsync(async (req, res) => {
+    if (req.dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database not available" });
+    }
+
+    const { code } = req.params;
+    const userId = req.user.id;
+
+    try {
+      //* find classroom
+      const classroomRows = await queryAsync(
+        "SELECT id, name, code, teacher_id, FROM classrooms WHERE code = ? LIMIT 1",
+        [code]
+      );
+
+      if (!classroomRows.length) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Classroom not found" });
+      }
+
+      const classroom = classroomRows[0];
+
+      //* check membership (student/teacher)
+      const memberRows = await queryAsync(
+        `SELECT cm.id, cm.status, cm.student_id
+       FROM classroom_members cm
+       WHERE cm.classroom_id = ? AND cm.student_id = ? LIMIT 1`,
+        [classroom.id, userId]
+      );
+
+      const isMember = !!(
+        memberRows.length && memberRows[0].status === "accepted"
+      );
+      const membershipStatus = memberRows.length ? memberRows[0].status : null;
+
+      const isTeacher = Number(classroom.teacher_id) === Number(userId);
+      const finalIsMember = isMember || isTeacher;
+
+      res.json({
+        success: true,
+        isMember: finalIsMember,
+        membershipStatus,
+        classroom: {
+          id: classroom.id,
+          name: classroom.name,
+          code: classroom.code,
+        },
+        isTeacher,
+      });
+    } catch (e) {
+      console.error("Error checking membership:", e);
+      return res.status(500).json({ success: false, error: "Server error" });
     }
   })
 );
