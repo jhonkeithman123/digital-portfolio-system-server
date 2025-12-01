@@ -16,11 +16,35 @@ This document describes notable server features, safety checks and operational g
 
 ## Main features
 
+// ...existing code...
+
 ### Security
 
 - Helmet is configured with a strict Content Security Policy and referrer policy; crossOriginEmbedderPolicy is disabled for compatibility where required.
 - CORS origin checking accepts an explicit origin list and hostname matches (supports non-browser requests with no Origin header).
 - Routes use token verification middleware (`verifyToken`) for protected resources.
+
+### Client-side per-tab session guard (prevent forward-nav reuse)
+
+- Purpose: mitigates an edge case where a user can navigate back to unauthenticated UI (login/role selection) and then press forward to return to a protected page that the browser restores from bfcache or SPA history without re-validating credentials.
+- Implementation (frontend):
+  - A small per-tab marker (sessionStorage key `tabAuth`) is set on successful login and removed when an unauthenticated page (login, signup, role-select, forgot-password) is shown.
+  - Installer `installLoginPageGuard()` is mounted on unauthenticated pages; it clears `tabAuth`, attempts a server-side logout if appropriate, and forces a reload to ensure the auth cookie is cleared for forward navigation.
+  - Protected pages use a reusable restore guard (`useAuthRestoreGuard`) installed centrally in `TokenGuard`. On popstate/pageshow/focus events the guard:
+    - Fast-path: if `tabAuth` is missing, immediately treat the tab as unauthenticated and redirect to login (no network wait).
+    - Otherwise call the server session revalidation (`useTokenStatus.refresh`) which performs a credentials-included GET `/auth/session`.
+- Files:
+  - src/utils/tabAuth.ts — utilities: setTabAuth, removeTabAuth, installLoginPageGuard, useAuthRestoreGuard.
+  - src/components/auth/tokenGuard.tsx — installs the restore guard for all protected routes and triggers revalidation.
+  - Unauthenticated pages call `installLoginPageGuard()` on mount (Login, Signup, RoleSelect, ForgotPassword).
+- Why this helps:
+  - sessionStorage is per-tab and synchronous, enabling immediate client-side rejection of forward navigation after the user viewed an unauthenticated page.
+  - pageshow/focus listeners handle bfcache restores where React mount effects might not run.
+- Limitations and notes:
+  - This is a client-side mitigation and does not replace server-side session invalidation. For cross-tab or server-enforced logout, revoke server sessions on logout.
+  - In dev with cross-origin APIs, ensure requests send credentials (or use the Vite proxy) so `/auth/session` calls hit the real backend and cookies are included.
+  - Testing: confirm `tabAuth` behavior in DevTools (Application → sessionStorage) and that GET `/auth/session` returns 401 or success:false when cookie missing.
+- Recommendation: keep the server `/auth/logout` and `/auth/session` behavior authoritative; the tabAuth guard provides fast UX-safe failure and covers bfcache/browser-history edge cases.
 
 ### DB resilience / graceful degradation
 
