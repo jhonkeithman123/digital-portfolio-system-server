@@ -413,7 +413,7 @@ router.post(
   })
 );
 
-rrouter.post(
+router.post(
   "/join",
   verifyToken,
   wrapAsync(async (req, res) => {
