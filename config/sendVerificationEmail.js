@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { MailerSend, EmailParams, Sender, Recipient, MailerSend } from "mailersend";
+import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 
 dotenv.config();
 
@@ -11,7 +11,7 @@ if (!MAILERSEND_API_KEY) {
   console.error("MAILERSEND_API_KEY not set. Email sending will fail. Set MAILERSEND_API_KEY in your environment.");
 }
 
-export const sendVerificationEmail = async (toString, code, expiry) => {
+export const sendVerificationEmail = async (to, code, expiry) => {
   if (!MAILERSEND_API_KEY) {
     throw new Error("No MailerSend API key configured (MAILERSEND_API_KEY).");
   }
