@@ -18,6 +18,7 @@ export const sendVerificationEmail = async (to, code, expiry) => {
 
   if (!to) throw new Error("Missing recipient email address.");
 
+  const maskedTo = typeof to === "string" ? to.replace(/(.{2}).+(@.+)/, "$1***$2") : String(to);
   const html = `
     <p>Your verification code is:</p>
     <h2 style="color:#2e86de;">${code}</h2>
@@ -27,7 +28,9 @@ export const sendVerificationEmail = async (to, code, expiry) => {
 
   const text = `Your verification code is: ${code}\nExpires: ${expiry}\nIf you didn't request this, ignore.`;
 
+  console.info(`[MAILERSEND] preparing to send verification to=${maskedTo} expiry=${expiry}`);
   try {
+    console.info("[MAILERSEND] initializing client");
     const mailerSend = new MailerSend({ apiKey: MAILERSEND_API_KEY });
     const sentFrom = new Sender(FROM_EMAIL || "no-reply@example.com", FROM_NAME);
     const recipients = [new Recipient(to)];
@@ -40,10 +43,11 @@ export const sendVerificationEmail = async (to, code, expiry) => {
       .setHtml(html)
       .setText(text);
 
-      await mailerSend.email.send(params);
-      console.info(`[MAILERSEND] verification sent to ${to}`);
-  } catch (e) {
-    console.error("[MAILERSEND] error sending email:", err?.message || err);
+    console.info("[MAILERSEND] sending email...");
+    const result = await mailerSend.email.send(params);
+    console.info(`[MAILERSEND] verification sent to=${maskedTo}`, { result });
+  } catch (err) {
+    console.error("[MAILERSEND] error sending email:", err?.message || err, { stack: err?.stack });
     throw err;
   }
 };
