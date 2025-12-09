@@ -16,6 +16,12 @@ let pool = null;
 let connecting = false;
 let attempts = 0;
 
+// HOST switching helpers
+let initialHost = process.env.DB_HOST || "127.0.0.1";
+const LOCAL_FALLBACK_HOST = process.env.DB_HOST_LOCAL || "127.0.0.1";
+let currentHost = initialHost;
+let switchedToLocal = false;
+
 function isDbAvailable() {
   return !!pool;
 }
@@ -24,50 +30,46 @@ async function tryConnectOnce() {
   try {
     const mysql = await import("mysql2/promise");
 
+    // pick connection params depending on whether we've switched to the local fallback
+    const usingLocal = currentHost === LOCAL_FALLBACK_HOST;
+    const host = currentHost;
+    const port = Number(usingLocal ? process.env.DB_PORT_LOCAL || process.env.DB_PORT || 3306 : process.env.DB_PORT || 3306);
+    const user = usingLocal ? process.env.DB_USER_LOCAL || process.env.DB_USER : process.env.DB_USER;
+    const password = usingLocal ? process.env.DB_PASS_LOCAL || process.env.DB_PASS : process.env.DB_PASS;
+    const database = usingLocal ? process.env.DB_NAME_LOCAL || process.env.DB_NAME : process.env.DB_NAME;
+
     const poolOptions = {
-      host: process.env.DB_HOST,
-      port: Number(process.env.DB_PORT || 3306),
-      user: process.env.DB_USER,
-      password: process.env.DB_PASS,
-      database: process.env.DB_NAME,
+      host,
+      port,
+      user,
+      password,
+      database,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
-      // timeouts
       connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
-      // optionally disable SSL if DB_SSL=false
-      ssl:
-        process.env.DB_SSL === "true"
-          ? {
-              rejectUnauthorized:
-                process.env.DB_SSL_REJECT_UNAUTHORIZED === "true",
-            }
-          : false,
+      ssl: DB_SSL === "true" || DB_SSL === "1"
+        ? { rejectUnauthorized: DB_SSL_REJECT_UNAUTHORIZED === "true" }
+        : false,
     };
 
-    // configure ssl behavior from env
-    if (DB_SSL === "true" || DB_SSL === "1") {
-      poolOptions.ssl = {
-        rejectUnauthorized: DB_SSL_REJECT_UNAUTHORIZED === "true",
-      };
-    } else {
-      // explicitly disable ssl for servers that don't support it
-      poolOptions.ssl = false;
-    }
+    // create pool using the chosen host/credentials
     pool = mysql.createPool(poolOptions);
 
+    // quick smoke test
     await pool.query("SELECT 1");
+
     attempts = 0;
-    console.log(
-      "DB connected:",
-      `${process.env.DB_HOST}:${process.env.DB_PORT}`
-    );
+    console.log("DB connected:", `${host}:${port}`, `(localFallback=${usingLocal})`);
     eventBus.emit("connected");
     return true;
   } catch (err) {
     attempts += 1;
+    // ensure pool is cleared on failure
+    try { pool && pool.end?.(); } catch {}
+    pool = null;
     const code = err?.code || err?.message || err;
-    console.warn(`DB connect attempt ${attempts} failed:`, code);
+    console.warn(`DB connect attempt ${attempts} to ${currentHost} failed:`, code);
     return false;
   }
 }
@@ -144,10 +146,24 @@ async function queryWithTimeout(
 async function connectLoop() {
   if (connecting) return;
   connecting = true;
-  console.log("Starting DB connect loop to", process.env.DB_HOST);
+  console.log("Starting DB connect loop (initial host):", initialHost);
+
   while (!pool) {
     const ok = await tryConnectOnce();
     if (ok) break;
+
+    // If we have not yet switched to local fallback and we've tried 3 times, switch.
+    if (!switchedToLocal && initialHost !== LOCAL_FALLBACK_HOST && attempts >= 3) {
+      console.warn(
+        `Failed to connect to remote DB at ${initialHost} after ${attempts} attempts. Switching to local DB host ${LOCAL_FALLBACK_HOST}`
+      );
+      currentHost = LOCAL_FALLBACK_HOST;
+      switchedToLocal = true;
+      attempts = 0;
+      // immediately try connecting to local in next loop iteration
+      continue;
+    }
+
     // If SKIP_DB_ON_START true and first attempts exhausted, stop trying immediately
     if (SKIP_DB_ON_START === "true" && attempts > 0) {
       console.warn(
@@ -155,6 +171,7 @@ async function connectLoop() {
       );
       break;
     }
+
     const backoff = Math.min(
       Number(DB_RETRY_BACKOFF_MS) * Math.max(1, attempts),
       60_000
@@ -164,10 +181,10 @@ async function connectLoop() {
   connecting = false;
   // If we are not connected, keep trying in background periodically
   if (!pool) {
-    setInterval(async () => {
-      if (!pool) await tryConnectOnce();
-    }, Math.max(5000, Number(DB_RETRY_BACKOFF_MS)));
-  }
+     setInterval(async () => {
+       if (!pool) await tryConnectOnce();
+     }, Math.max(5000, Number(DB_RETRY_BACKOFF_MS)));
+   }
 }
 
 // public helpers
