@@ -1,53 +1,62 @@
 import dotenv from "dotenv";
-import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
-const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY;
-const FROM_EMAIL = (process.env.MAILERSEND_FROM_EMAIL || "").trim();
-const FROM_NAME = (process.env.MAILERSEND_FROM_NAME || "Digital Portfolio").trim();
+const SMTP_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
+const SMTP_PORT = Number(process.env.EMAIL_PORT || 587);
+const SMTP_SECURE = (process.env.EMAIL_SECURE || "false") === "true"; // true for 465
+const SMTP_USER = process.env.EMAIL_USER;
+const SMTP_PASS = process.env.EMAIL_PASS;
 
-if (!MAILERSEND_API_KEY) {
-  console.error("MAILERSEND_API_KEY not set. Email sending will fail. Set MAILERSEND_API_KEY in your environment.");
+const FROM_EMAIL = (process.env.MAIL_FROM_EMAIL || process.env.EMAIL_USER || "no-reply@example.com").trim();
+const FROM_NAME = (process.env.MAIL_FROM_NAME || "Digital Portfolio").trim();
+
+if (!SMTP_USER || !SMTP_PASS) {
+  console.warn(
+    "SMTP credentials are not fully configured. Set EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS."
+  );
+}
+
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+  });
 }
 
 export const sendVerificationEmail = async (to, code, expiry) => {
-  if (!MAILERSEND_API_KEY) {
-    throw new Error("No MailerSend API key configured (MAILERSEND_API_KEY).");
-  }
-
   if (!to) throw new Error("Missing recipient email address.");
 
   const maskedTo = typeof to === "string" ? to.replace(/(.{2}).+(@.+)/, "$1***$2") : String(to);
+  const subject = "Verify Your Email";
   const html = `
     <p>Your verification code is:</p>
     <h2 style="color:#2e86de;">${code}</h2>
     <p>This code will expire at <strong>${expiry}</strong>.</p>
     <p>If you didn't request this, please ignore the message.</p>
   `;
-
   const text = `Your verification code is: ${code}\nExpires: ${expiry}\nIf you didn't request this, ignore.`;
 
-  console.info(`[MAILERSEND] preparing to send verification to=${maskedTo} expiry=${expiry}`);
+  console.info(`[MAIL] preparing to send verification to=${maskedTo} expiry=${expiry}`);
   try {
-    console.info("[MAILERSEND] initializing client");
-    const mailerSend = new MailerSend({ apiKey: MAILERSEND_API_KEY });
-    const sentFrom = new Sender(FROM_EMAIL || "no-reply@example.com", FROM_NAME);
-    const recipients = [new Recipient(to)];
-
-    const params = new EmailParams()
-      .setFrom(sentFrom)
-      .setTo(recipients)
-      .setReplyTo(sentFrom)
-      .setSubject("Verify Your Email")
-      .setHtml(html)
-      .setText(text);
-
-    console.info("[MAILERSEND] sending email...");
-    const result = await mailerSend.email.send(params);
-    console.info(`[MAILERSEND] verification sent to=${maskedTo}`, { result });
+    const transporter = createTransporter();
+    const info = await transporter.sendMail({
+      from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+      to,
+      subject,
+      text,
+      html,
+    });
+    console.info(`[MAIL] sent verification to=${maskedTo} messageId=${info.messageId}`);
+    return info;
   } catch (err) {
-    console.error("[MAILERSEND] error sending email:", err?.message || err, { stack: err?.stack });
+    console.error("[MAIL] error sending email:", err?.message || err, { stack: err?.stack });
     throw err;
   }
 };
