@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Backend API Service</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card" role="region" aria-labelledby="title">
+        <div class="logo" aria-hidden="true">API</div>
+        <div>
+          <h1 id="title">Backend API — Not a user-facing site</h1>
+          <p>
+            This server hosts the API used by the frontend application. It's
+            intended for programmatic access only. If you navigated here in a
+            browser, open the client application instead.
+          </p>
+          <div class="actions">
+            <a
+              class="btn btn-primary"
+              href="<%= clientUrl%>"
+              target="_blank"
+              rel="noopener"
+              >Open Frontend</a
+            >
+            <a
+              class="btn btn-ghost"
+              href="<%= docsUrl %>"
+              target="_blank"
+              rel="noopener"
+              >View docs</a
+            >
+          </div>
+
+          <h2>Available Endpoints</h2>
+          <div class="endpoints">
+            <div class="endpoint">
+              /auth — Authentication (login, signup, verify)
+            </div>
+            <div class="endpoint">
+              /classrooms — Manage classrooms & memberships
+            </div>
+            <div class="endpoint">/quizzes — Quiz creation & attempts</div>
+            <div class="endpoint">
+              /activity — Posts, comments & discussions
+            </div>
+            <div class="endpoint">/api — Submissions & uploads</div>
+            <div class="endpoint">/security — Security & permissions</div>
+          </div>
+
+          <div class="meta">
+            For API access use endpoints like <code>/auth</code>,
+            <code>/classrooms</code>, <code>/quizzes</code>. Requests should be
+            made from the official client or an authorized service.
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
