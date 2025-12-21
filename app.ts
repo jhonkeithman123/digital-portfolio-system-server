@@ -13,6 +13,7 @@ import mainRoute from "./routes/default";
 import security from "./routes/security";
 import classrooms from "./routes/classrooms";
 import activities from "./routes/activities";
+import showcase from "./routes/showcase";
 
 import db from "./config/db";
 
@@ -100,6 +101,12 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
 app.use(express.json());
 app.use(cookieParser());
 
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log("[DEBUG] Cookies received:", req.cookies);
+  console.log("[DEBUG] Auth header:", req.headers.authorization);
+  next();
+});
+
 // Normalize token sources for authentication
 app.use((req: Request, res: Response, next: NextFunction) => {
   try {
@@ -173,6 +180,7 @@ app.use("/security", security);
 app.use("/classrooms", classrooms);
 app.use("/quizzes", quizzes);
 app.use("/activity", activities);
+app.use("/showcase", showcase);
 
 // ============================================================================
 // ERROR HANDLING

@@ -5,7 +5,12 @@ import wrapAsync from "../utils/wrapAsync";
 import db from "../config/db";
 import { verifyToken, type AuthRequest } from "../middleware/auth";
 import { queryAsync } from "../config/helpers/dbHelper";
-import type { ActivityRow, CommentRow, CommentReplyRow } from "../types/db";
+import type {
+  ActivityRow,
+  CommentRow,
+  CommentReplyRow,
+  InstructionEntry,
+} from "../types/db";
 import type { RowDataPacket } from "mysql2";
 
 const router = express.Router();
@@ -205,7 +210,6 @@ router.get(
               a.classroom_id,
               a.teacher_id,
               a.title,
-              a.instructions,
               a.file_path,
               a.original_name,
               a.mime_type,
@@ -248,8 +252,29 @@ router.get(
       }
     }
 
+    interface InstructionWithTeacher extends InstructionEntry {
+      username: string;
+      teacher_role: string;
+    }
+
+    const instructions = await queryAsync<InstructionWithTeacher>(
+      `SELECT ai.id,
+              ai.activity_id,
+              ai.teacher_id,
+              ai.instruction_text,
+              ai.created_at,
+              ai.updated_at,
+              u.username,
+              u.role as teacher_role
+       FROM activity_instructions ai
+       JOIN users u ON u.ID = ai.teacher_id
+       WHERE ai.activity_id = ?
+       ORDER BY ai.created_at ASC`,
+      [id]
+    );
+
     // Step 4: Return activity data
-    return res.json({ success: true, activity });
+    return res.json({ success: true, activity: { ...activity, instructions } });
   })
 );
 
@@ -317,10 +342,11 @@ router
 
       // Step 3: Fetch all replies for these comments (if any)
       let repliesByComment: Record<number, ReplyWithUser[]> = {};
-      if (comments.length) {
+      if (comments.length > 0) {
         const ids = comments.map((c) => c.id); // Extract comment IDs
 
         // Use IN (?) to fetch all replies in one query
+        const placeholder = ids.map(() => "?").join(",");
         const replies = await queryAsync<ReplyWithUser>(
           `SELECT r.id,
                   r.comment_id,
@@ -332,9 +358,9 @@ router
                   u.role
            FROM comment_replies r
            JOIN users u ON u.ID = r.user_id
-           WHERE r.comment_id IN (?)
+           WHERE r.comment_id IN (${placeholder})
            ORDER BY r.created_at ASC`,
-          [ids] // DBParams allows arrays for IN clauses
+          ids // DBParams allows arrays for IN clauses
         );
 
         // Step 4: Group replies by their parent comment ID
@@ -511,6 +537,15 @@ router.post(
       [commentId, userId, safe]
     );
 
+    if (!result || typeof result !== "object" || !("insertId" in result)) {
+      console.error(`[ROUTE ERROR] Invalid result from INSERT:`, result);
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to insert reply" });
+    }
+
+    const replyId = (result as any).insertId;
+
     // Step 5: Fetch newly created reply with user details
     const inserted = await queryAsync<ReplyWithUser>(
       `SELECT r.id,
@@ -525,8 +560,14 @@ router.post(
        JOIN users u ON u.ID = r.user_id
        WHERE r.id = ?
        LIMIT 1`,
-      [result[0].insertId]
+      [replyId]
     );
+
+    if (!inserted.length) {
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to fetch inserted reply" });
+    }
 
     // Step 6: Return the reply
     return res.json({
@@ -592,7 +633,7 @@ router.post(
       // Step 5: Insert activity into database
       const [result] = await db.query<RowDataPacket[]>(
         `INSERT INTO activities
-          (classroom_id, teacher_id, title, instructions, file_path, original_name, mime_type)
+          (classroom_id, teacher_id, title, file_path, original_name, mime_type)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           classroom.id,
@@ -605,10 +646,22 @@ router.post(
         ]
       );
 
+      const activityId = (result as any).insertId;
+
+      const trimmedInstructions = instructions.trim();
+      if (trimmedInstructions) {
+        await db.query<RowDataPacket[]>(
+          `INSERT INTO activity_instructions
+            (activity_id, teacher_id, instruction_text, created_at, updated_at)
+           VALUES (?, ?, ?, NOW(), NOW())`,
+          [activityId, req.user!.userId, trimmedInstructions.slice(0, 2000)]
+        );
+      }
+
       // Step 6: Return success with new activity ID
       return res.json({
         success: true,
-        id: result[0].insertId,
+        id: activityId,
         message: "Activity created",
       });
     } catch (err) {
@@ -682,7 +735,7 @@ router.get(
 
     // Step 3: Fetch all activities for this classroom (newest first)
     const activities = await queryAsync<ActivityRow>(
-      `SELECT id, classroom_id, teacher_id, title, instructions, file_path, 
+      `SELECT id, classroom_id, teacher_id, title, file_path, 
               original_name, mime_type, created_at
      FROM activities
      WHERE classroom_id = ?
@@ -737,7 +790,7 @@ router.patch(
 
     // Step 2: Ensure activity exists and fetch ownership info
     const actRows = await queryAsync<ActivityRow>(
-      `SELECT id, classroom_id, teacher_id, title, instructions, 
+      `SELECT id, classroom_id, teacher_id, title, 
               file_path, original_name, mime_type, created_at
      FROM activities
      WHERE id = ?
@@ -771,31 +824,50 @@ router.patch(
         .json({ success: false, error: "Instructions cannot be empty" });
     }
 
-    // Enforce max length (10,000 chars) to avoid huge payloads
-    const safe = trimmed.slice(0, 10000);
+    // Enforce max length (2,000 chars per instruction)
+    const safe = trimmed.slice(0, 2000);
 
-    // Step 5: Update instructions in database
-    await db.query<RowDataPacket[]>(
-      `UPDATE activities
-     SET instructions = ?
-     WHERE id = ?`,
-      [safe, id]
+    // Step 5: Insert new instruction entry (append mode)
+    const [result] = await db.query<RowDataPacket[]>(
+      `INSERT INTO activity_instructions
+        (activity_id, teacher_id, instruction_text, created_at)
+       VALUES (?, ?, ?, NOW())`,
+      [id, userId, safe]
     );
 
-    // Step 6: Fetch and return updated activity
-    const updated = await queryAsync<ActivityRow>(
-      `SELECT id, classroom_id, teacher_id, title, instructions, 
-              file_path, original_name, mime_type, created_at
-     FROM activities
-     WHERE id = ?
-     LIMIT 1`,
+    if (!result || !("insertId" in result)) {
+      console.error("[ROUTE ERROR] Failed to insert instruction:", result);
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to save instruction" });
+    }
+
+    // Step 6: Fetch all instructions for this activity (oldest first)
+    interface InstructionWithTeacher extends InstructionEntry {
+      username: string;
+      teacher_role: string;
+    }
+
+    const allInstructions = await queryAsync<InstructionWithTeacher>(
+      `SELECT ai.id,
+              ai.activity_id,
+              ai.teacher_id,
+              ai.instruction_text,
+              ai.created_at,
+              u.username,
+              u.role as teacher_role
+       FROM activity_instructions ai
+       JOIN users u ON u.ID = ai.teacher_id
+       WHERE ai.activity_id = ?
+       ORDER BY ai.created_at ASC`,
       [id]
     );
 
+    // Step 7: Return all instructions with attribution
     return res.json({
       success: true,
-      message: "Instructions updated",
-      activity: updated[0] || { id, instructions: safe },
+      message: "Instruction added",
+      instructions: allInstructions,
     });
   })
 );
