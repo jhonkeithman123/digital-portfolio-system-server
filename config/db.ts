@@ -1,10 +1,18 @@
 import dotenv from "dotenv";
 import EventEmitter from "events";
+import type {
+  Pool,
+  PoolOptions,
+  RowDataPacket,
+  ResultSetHeader,
+  FieldPacket,
+  SslOptions,
+} from "mysql2/promise";
+import type { DBParams } from "../types/db";
 
 dotenv.config();
 
 const {
-  DB_RETRY_ATTEMPTS = 0, // 0 = retry forever
   DB_RETRY_BACKOFF_MS = 2000,
   SKIP_DB_ON_START = "false",
   DB_SSL = "false", // <-- new env flag: "true" or "false"
@@ -12,7 +20,7 @@ const {
 } = process.env;
 
 const eventBus = new EventEmitter();
-let pool = null;
+let pool: Pool | null = null;
 let connecting = false;
 let attempts = 0;
 
@@ -22,23 +30,38 @@ const LOCAL_FALLBACK_HOST = process.env.DB_HOST_LOCAL || "127.0.0.1";
 let currentHost = initialHost;
 let switchedToLocal = false;
 
-function isDbAvailable() {
+function isDbAvailable(): boolean {
   return !!pool;
 }
 
-async function tryConnectOnce() {
+async function tryConnectOnce(): Promise<boolean> {
   try {
     const mysql = await import("mysql2/promise");
 
     // pick connection params depending on whether we've switched to the local fallback
     const usingLocal = currentHost === LOCAL_FALLBACK_HOST;
     const host = currentHost;
-    const port = Number(usingLocal ? process.env.DB_PORT_LOCAL || process.env.DB_PORT || 3306 : process.env.DB_PORT || 3306);
-    const user = usingLocal ? process.env.DB_USER_LOCAL || process.env.DB_USER : process.env.DB_USER;
-    const password = usingLocal ? process.env.DB_PASS_LOCAL || process.env.DB_PASS : process.env.DB_PASS;
-    const database = usingLocal ? process.env.DB_NAME_LOCAL || process.env.DB_NAME : process.env.DB_NAME;
+    const port = Number(
+      usingLocal
+        ? process.env.DB_PORT_LOCAL || process.env.DB_PORT || 3306
+        : process.env.DB_PORT || 3306
+    );
+    const user = usingLocal
+      ? process.env.DB_USER_LOCAL || process.env.DB_USER
+      : process.env.DB_USER;
+    const password = usingLocal
+      ? process.env.DB_PASS_LOCAL || process.env.DB_PASS
+      : process.env.DB_PASS;
+    const database = usingLocal
+      ? process.env.DB_NAME_LOCAL || process.env.DB_NAME
+      : process.env.DB_NAME;
 
-    const poolOptions = {
+    const ssl: string | SslOptions | undefined =
+      DB_SSL === "true" || DB_SSL === "1"
+        ? { rejectUnauthorized: DB_SSL_REJECT_UNAUTHORIZED === "true" }
+        : undefined;
+
+    const poolOptions: PoolOptions = {
       host,
       port,
       user,
@@ -48,9 +71,7 @@ async function tryConnectOnce() {
       connectionLimit: 10,
       queueLimit: 0,
       connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000),
-      ssl: DB_SSL === "true" || DB_SSL === "1"
-        ? { rejectUnauthorized: DB_SSL_REJECT_UNAUTHORIZED === "true" }
-        : false,
+      ssl,
     };
 
     // create pool using the chosen host/credentials
@@ -60,26 +81,40 @@ async function tryConnectOnce() {
     await pool.query("SELECT 1");
 
     attempts = 0;
-    console.log("DB connected:", `${host}:${port}`, `(localFallback=${usingLocal})`);
+    console.log(
+      "DB connected:",
+      `${host}:${port}`,
+      `(localFallback=${usingLocal})`
+    );
     eventBus.emit("connected");
     return true;
   } catch (err) {
     attempts += 1;
     // ensure pool is cleared on failure
-    try { pool && pool.end?.(); } catch {}
+    try {
+      pool && pool.end?.();
+    } catch {}
     pool = null;
-    const code = err?.code || err?.message || err;
-    console.warn(`DB connect attempt ${attempts} to ${currentHost} failed:`, code);
+    const code = (err as Error)?.message || String(err);
+    console.warn(
+      `DB connect attempt ${attempts} to ${currentHost} failed:`,
+      code
+    );
     return false;
   }
 }
 
-async function queryWithTimeout(
-  sql,
-  params = [],
-  timeoutMs = 8000,
-  maxRetries = 2
-) {
+async function queryWithTimeout<
+  T extends
+    | RowDataPacket[]
+    | ResultSetHeader
+    | ResultSetHeader[] = RowDataPacket[]
+>(
+  sql: string,
+  params: DBParams = [],
+  timeoutMs: number = 8000,
+  maxRetries: number = 2
+): Promise<any> {
   const transientCodes = new Set([
     "ECONNRESET",
     "PROTOCOL_CONNECTION_LOST",
@@ -88,7 +123,8 @@ async function queryWithTimeout(
     "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR",
   ]);
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((r) => setTimeout(r, ms));
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const start = Date.now();
@@ -100,14 +136,14 @@ async function queryWithTimeout(
         });
 
       // use same call shape as previous code (execute/query returns [rows, fields])
-      const p = poolRef.execute(sql, params);
-      const timeout = new Promise((_, rej) =>
+      const p = poolRef.execute<T>(sql, params);
+      const timeout = new Promise<never>((_, rej) =>
         setTimeout(
           () => rej(new Error(`DB query timed out after ${timeoutMs}ms`)),
           timeoutMs
         )
       );
-      const result = await Promise.race([p, timeout]);
+      const result = (await Promise.race([p, timeout])) as [T, FieldPacket[]];
 
       const dur = Date.now() - start;
       console.info(
@@ -121,17 +157,20 @@ async function queryWithTimeout(
       return result;
     } catch (err) {
       const dur = Date.now() - start;
+      const errAny = err as any;
+      const errMsg = errAny?.message || String(err);
+      const errCode = errAny?.code || "";
       console.warn(
         `[DB] query ERR (${dur}ms) sql=${sql
           .split(/\s+/)
           .slice(0, 6)
-          .join(" ")} err=${err?.code || err?.message || err}`
+          .join(" ")} err=${errMsg}`
       );
 
-      if (attempt < maxRetries && transientCodes.has(err?.code)) {
+      if (attempt < maxRetries && transientCodes.has(errCode)) {
         const backoff = 200 * Math.pow(2, attempt);
         console.info(
-          `[DB] transient error ${err.code} - retrying attempt ${
+          `[DB] transient error ${errCode} - retrying attempt ${
             attempt + 1
           } after ${backoff}ms`
         );
@@ -153,7 +192,11 @@ async function connectLoop() {
     if (ok) break;
 
     // If we have not yet switched to local fallback and we've tried 3 times, switch.
-    if (!switchedToLocal && initialHost !== LOCAL_FALLBACK_HOST && attempts >= 3) {
+    if (
+      !switchedToLocal &&
+      initialHost !== LOCAL_FALLBACK_HOST &&
+      attempts >= 3
+    ) {
       console.warn(
         `Failed to connect to remote DB at ${initialHost} after ${attempts} attempts. Switching to local DB host ${LOCAL_FALLBACK_HOST}`
       );
@@ -181,22 +224,32 @@ async function connectLoop() {
   connecting = false;
   // If we are not connected, keep trying in background periodically
   if (!pool) {
-     setInterval(async () => {
-       if (!pool) await tryConnectOnce();
-     }, Math.max(5000, Number(DB_RETRY_BACKOFF_MS)));
-   }
+    setInterval(async () => {
+      if (!pool) await tryConnectOnce();
+    }, Math.max(5000, Number(DB_RETRY_BACKOFF_MS)));
+  }
 }
 
 // public helpers
-async function getPool() {
+async function getPool(): Promise<Pool | null> {
   if (pool) return pool;
   // attempt immediate connect once (non-blocking for callers)
   await tryConnectOnce();
   return pool;
 }
 
-async function query(sql, params = []) {
-  return queryWithTimeout(sql, params);
+// mysql2 returns [rows, fields] tuples
+type QueryResult<
+  T extends RowDataPacket[] | ResultSetHeader | ResultSetHeader[]
+> = [T, FieldPacket[]];
+
+async function query<
+  T extends
+    | RowDataPacket[]
+    | ResultSetHeader
+    | ResultSetHeader[] = RowDataPacket[]
+>(sql: string, params: DBParams = []): Promise<QueryResult<T>> {
+  return queryWithTimeout<T>(sql, params);
 }
 
 // start background connection attempts immediately
@@ -208,5 +261,5 @@ export default {
   getPool,
   query,
   isDbAvailable,
-  on: (ev, cb) => eventBus.on(ev, cb),
+  on: (ev: string, cb: (...args: unknown[]) => void) => eventBus.on(ev, cb),
 };

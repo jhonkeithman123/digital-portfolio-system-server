@@ -1,0 +1,252 @@
+import express from "express";
+import ejs from "ejs";
+import path from "path";
+import dotenv from "dotenv";
+import { Server } from "http";
+import { fileURLToPath } from "url";
+import cookieParser from "cookie-parser";
+import type { Express, Request, Response, NextFunction } from "express";
+
+import auth from "./routes/auth";
+import quizzes from "./routes/quizzes";
+import mainRoute from "./routes/default";
+import security from "./routes/security";
+import classrooms from "./routes/classrooms";
+import activities from "./routes/activities";
+
+import db from "./config/db";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app: Express = express();
+app.set("trust proxy", 1);
+
+const clientUrl = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin;
+
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:5000",
+    process.env.CLIENT_ORIGIN || "http://localhost:5173",
+  ];
+
+  // Log CORS attempt
+  console.log(
+    `[CORS] ${req.method} ${req.originalUrl} from origin: ${origin || "none"}`
+  );
+
+  // Set origin to the requesting origin if it's allowed
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    console.log(`[CORS] ✅ Allowing origin: ${origin}`);
+  } else if (!origin) {
+    // Allow requests with no origin (same-site, curl, Postman)
+    res.header("Access-Control-Allow-Origin", clientUrl);
+    console.log(`[CORS] ✅ Allowing no-origin request, using: ${clientUrl}`);
+  } else {
+    console.log(`[CORS] ❌ Rejecting origin: ${origin}`);
+  }
+
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  // Handle preflight requests
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+// ============================================================================
+// MIDDLEWARE
+// ============================================================================
+
+// Static files
+app.use(express.static(path.join(__dirname, "public")));
+
+// Request logging
+app.use((req: Request, res: Response, next: NextFunction): void => {
+  const start = Date.now();
+  const origin = req.headers.origin || "<none>";
+
+  console.info(
+    `[REQ START] ${new Date().toISOString()} ${req.ip} ${req.method} ${
+      req.originalUrl
+    } origin=${origin}`
+  );
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.info(
+      `[REQ END]   ${new Date().toISOString()} ${req.ip} ${req.method} ${
+        req.originalUrl
+      } status=${res.statusCode} dur=${duration}ms`
+    );
+  });
+
+  next();
+});
+
+app.use(express.json());
+app.use(cookieParser());
+
+// Normalize token sources for authentication
+app.use((req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+
+    if (!authHeader || String(authHeader).trim() === "") {
+      // Try cookie
+      if (req.cookies?.token) {
+        req.headers.authorization = `Bearer ${req.cookies.token}`;
+      }
+      // Try query parameter (for special clients)
+      else if (req.query?.token) {
+        req.headers.authorization = `Bearer ${String(req.query.token)}`;
+      }
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  next();
+});
+
+// Database availability middleware
+type DBMiddleware = Request & {
+  dbAvailable: boolean;
+};
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  try {
+    const isAvailable = db.isDbAvailable ? db.isDbAvailable() : false;
+    const status = isAvailable ? "available" : "unavailable";
+
+    res.setHeader("X-DB-Status", status);
+    (req as DBMiddleware).dbAvailable = isAvailable;
+  } catch (e) {
+    (req as DBMiddleware).dbAvailable = false;
+    res.setHeader("X-DB-Status", "unknown");
+  }
+  next();
+});
+
+// ============================================================================
+// ROUTES
+// ============================================================================
+
+// Landing page for browser visits
+app.get("/", (req: Request, res: Response, next: NextFunction): void => {
+  const accept = req.headers.accept || "";
+  if (!accept.includes("text/html")) return next();
+
+  const docsUrl =
+    "https://github.com/jhonkeithman123/digital-portfolio-system-client/blob/main/For_Client.md";
+  const accentColor = process.env.ACCENT_COLOR || "#007bff";
+
+  ejs.renderFile(
+    path.join(__dirname, "public/index.html"),
+    { clientUrl, docsUrl, accent: accentColor },
+    (err: Error | null, html: string) => {
+      if (err) {
+        console.error("EJS render error:", err);
+        return res.status(500).json({ error: "Template render failed" });
+      }
+      res.type("html").send(html);
+    }
+  );
+});
+
+// API routes
+app.use("/", mainRoute);
+app.use("/auth", auth);
+app.use("/security", security);
+app.use("/classrooms", classrooms);
+app.use("/quizzes", quizzes);
+app.use("/activity", activities);
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+// Global error handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
+  console.error(
+    `[UNHANDLED ERROR] ${new Date().toISOString()} ${req.method} ${
+      req.originalUrl
+    }`,
+    err?.stack || err
+  );
+
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Internal Server Error" });
+  } else {
+    next(err);
+  }
+});
+
+// Process-level error handlers
+process.on("unhandledRejection", (reason: unknown) => {
+  console.error("[UNHANDLED REJECTION]", reason);
+});
+
+process.on("uncaughtException", (err: Error) => {
+  console.error("[UNCAUGHT EXCEPTION]", err);
+  process.exit(1);
+});
+
+// ============================================================================
+// SERVER STARTUP
+// ============================================================================
+
+const DEFAULT_PORT = parseInt(process.env.PORT ?? "5000", 10);
+const MAX_ATTEMPTS = 10;
+
+function tryListen(port: number, attemptsLeft: number) {
+  const server: Server = app.listen(port);
+
+  server.on("listening", () => {
+    console.log(`✅ Server listening on port ${port}`);
+    console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`);
+    console.log(`🔗 Client URL: ${clientUrl}`);
+  });
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err?.code === "EADDRINUSE") {
+      console.warn(`⚠️  Port ${port} is already in use.`);
+
+      try {
+        server.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+
+      if (attemptsLeft > 0) {
+        const nextPort = port + 1;
+        console.log(
+          `🔄 Trying port ${nextPort} (${attemptsLeft - 1} attempts remaining)`
+        );
+        tryListen(nextPort, attemptsLeft - 1);
+      } else {
+        console.error(
+          `❌ No available ports after ${MAX_ATTEMPTS} attempts. Exiting.`
+        );
+        process.exit(1);
+      }
+    } else {
+      console.error("❌ Server error:", err);
+      process.exit(1);
+    }
+  });
+}
+
+tryListen(DEFAULT_PORT, MAX_ATTEMPTS);
