@@ -13,11 +13,19 @@ export interface ActivityRow extends RowDataPacket {
   classroom_id: number;
   teacher_id: number;
   title: string;
-  instructions: string;
   file_path: string | null;
   original_name: string | null;
   mime_type: string | null;
   created_at: Date;
+}
+
+export interface InstructionEntry extends RowDataPacket {
+  id: number;
+  activity_id: number;
+  teacher_id: number;
+  instruction_text: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ClassroomRow extends RowDataPacket {
