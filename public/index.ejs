@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Backend API Service</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <canvas id="particles"></canvas>
+
+    <div class="wrap">
+      <div class="card" role="region" aria-labelledby="title">
+        <div class="card-glow"></div>
+
+        <div class="logo-container">
+          <div class="logo" aria-hidden="true">
+            <div class="logo-inner">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 2L2 7L12 12L22 7L12 2Z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M2 17L12 22L22 17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M2 12L12 17L22 12"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div class="logo-ring"></div>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="badge">Backend API Service</div>
+          <h1 id="title">
+            <span class="gradient-text">Not a User-Facing Site</span>
+          </h1>
+          <p class="description">
+            This server hosts the API used by the frontend application. It's
+            intended for programmatic access only. If you navigated here in a
+            browser, open the client application instead.
+          </p>
+
+          <div class="actions">
+            <a
+              class="btn btn-primary"
+              href="/redirect?url=<%= encodeURIComponent(clientUrl) %>"
+              target="_blank"
+              rel="noopener"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="15 3 21 3 21 9"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="10"
+                  y1="14"
+                  x2="21"
+                  y2="3"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Open Frontend
+            </a>
+            <a
+              class="btn btn-ghost"
+              href="/redirect?url=<%= encodeURIComponent(docsUrl) %>"
+              target="_blank"
+              rel="noopener"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="14 2 14 8 20 8"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="16"
+                  y1="13"
+                  x2="8"
+                  y2="13"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <line
+                  x1="16"
+                  y1="17"
+                  x2="8"
+                  y2="17"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  points="10 9 9 9 8 9"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              View Docs
+            </a>
+          </div>
+
+          <div class="section-header">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <rect
+                x="3"
+                y="3"
+                width="7"
+                height="7"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect
+                x="14"
+                y="3"
+                width="7"
+                height="7"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect
+                x="14"
+                y="14"
+                width="7"
+                height="7"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect
+                x="3"
+                y="14"
+                width="7"
+                height="7"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <h2>Available Endpoints</h2>
+          </div>
+
+          <div class="endpoints">
+            <div class="endpoint" data-animate>
+              <div class="endpoint-icon">🔐</div>
+              <div class="endpoint-content">
+                <code>/auth</code>
+                <span>Authentication (login, signup, verify)</span>
+              </div>
+            </div>
+            <div class="endpoint" data-animate>
+              <div class="endpoint-icon">🏫</div>
+              <div class="endpoint-content">
+                <code>/classrooms</code>
+                <span>Manage classrooms & memberships</span>
+              </div>
+            </div>
+            <div class="endpoint" data-animate>
+              <div class="endpoint-icon">📝</div>
+              <div class="endpoint-content">
+                <code>/quizzes</code>
+                <span>Quiz creation & attempts</span>
+              </div>
+            </div>
+            <div class="endpoint" data-animate>
+              <div class="endpoint-icon">💬</div>
+              <div class="endpoint-content">
+                <code>/activity</code>
+                <span>Posts, comments & discussions</span>
+              </div>
+            </div>
+            <div class="endpoint" data-animate>
+              <div class="endpoint-icon">📤</div>
+              <div class="endpoint-content">
+                <code>/api</code>
+                <span>Submissions & uploads</span>
+              </div>
+            </div>
+            <div class="endpoint" data-animate>
+              <div class="endpoint-icon">🛡️</div>
+              <div class="endpoint-content">
+                <code>/security</code>
+                <span>Security & permissions</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="meta">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <line
+                x1="12"
+                y1="16"
+                x2="12"
+                y2="12"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <line
+                x1="12"
+                y1="8"
+                x2="12.01"
+                y2="8"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            For API access use endpoints like <code>/auth</code>,
+            <code>/classrooms</code>, <code>/quizzes</code>. Requests should be
+            made from the official client or an authorized service.
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="status">
+          <div class="status-dot"></div>
+          <span>All Systems Operational</span>
+        </div>
+      </div>
+    </div>
+
+    <script src="particles.js"></script>
+  </body>
+</html>

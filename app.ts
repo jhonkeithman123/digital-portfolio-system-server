@@ -161,7 +161,7 @@ app.get("/", (req: Request, res: Response, next: NextFunction): void => {
   const accentColor = process.env.ACCENT_COLOR || "#007bff";
 
   ejs.renderFile(
-    path.join(__dirname, "public/index.html"),
+    path.join(__dirname, "public/index.ejs"),
     { clientUrl, docsUrl, accent: accentColor },
     (err: Error | null, html: string) => {
       if (err) {
@@ -181,6 +181,86 @@ app.use("/classrooms", classrooms);
 app.use("/quizzes", quizzes);
 app.use("/activity", activities);
 app.use("/showcase", showcase);
+
+// ============================================================================
+// BROWSER REDIRECT MIDDLEWARE (must be AFTER API routes)
+// ============================================================================
+
+/**
+ * Redirect all browser HTML requests back to root
+ * This prevents users from accessing API endpoints via browser URL bar
+ */
+app.use((req: Request, res: Response, next: NextFunction): void => {
+  const accept = req.headers.accept || "";
+  const userAgent = req.headers["user-agent"] || "";
+
+  // Check if request is from a browser asking for HTML
+  const isBrowser =
+    accept.includes("text/html") &&
+    (userAgent.includes("Mozilla") ||
+      userAgent.includes("Chrome") ||
+      userAgent.includes("Safari") ||
+      userAgent.includes("Edge") ||
+      userAgent.includes("Firefox"));
+
+  // Allow /redirect endpoint to pass through
+  if (req.path === "/redirect") {
+    return next();
+  }
+
+  // If it's a browser trying to access any route other than "/" or "/redirect"
+  if (isBrowser && req.path !== "/") {
+    console.log(
+      `[SECURITY] Browser detected accessing ${req.path}, redirecting to /`
+    );
+    return res.redirect(302, "/");
+  }
+
+  next();
+});
+
+// ============================================================================
+// EXTERNAL REDIRECT HANDLER
+// ============================================================================
+
+/**
+ * Safe redirect endpoint for external links from the landing page
+ * Usage: <a href="/redirect?url=https://github.com/...">
+ */
+app.get("/redirect", (req: Request, res: Response): void => {
+  const targetUrl = req.query.url as string;
+
+  if (!targetUrl) {
+    return res.redirect(302, "/");
+  }
+
+  // Whitelist of allowed domains
+  const allowedDomains = [
+    "github.com",
+    "docs.google.com",
+    new URL(clientUrl).hostname,
+  ];
+
+  try {
+    const url = new URL(targetUrl);
+    const isAllowed = allowedDomains.some(
+      (domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`)
+    );
+
+    if (isAllowed) {
+      console.log(`[REDIRECT] Allowing external redirect to: ${targetUrl}`);
+      return res.redirect(302, targetUrl);
+    } else {
+      console.log(
+        `[SECURITY] Blocked redirect to unauthorized domain: ${url.hostname}`
+      );
+      return res.redirect(302, "/");
+    }
+  } catch (e) {
+    console.error(`[REDIRECT] Invalid URL: ${targetUrl}`);
+    return res.redirect(302, "/");
+  }
+});
 
 // ============================================================================
 // ERROR HANDLING

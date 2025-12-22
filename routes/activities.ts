@@ -89,6 +89,11 @@ interface AuthResult {
   activity?: ActivityRow; // The authorized activity successful
 }
 
+interface InstructionWithTeacher extends InstructionEntry {
+  username: string;
+  teacher_role: string;
+}
+
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -131,10 +136,9 @@ async function authorizeActivity(
 ): Promise<AuthResult> {
   // Step 1: Fetch the activity to get classroom and teacher info
   const rows = await queryAsync<ActivityRow>(
-    `SELECT a.id, a.classroom_id, a.teacher_id, a.title, a.instructions,
-            a.file_path, a.original_name, a.mime_type, a.created_at
-     FROM activities a
-     WHERE a.id = ?
+    `SELECT id, classroom_id, teacher_id, title, file_path, original_name, mime_type, created_at
+     FROM activities
+     WHERE id = ?
      LIMIT 1`,
     [activityId]
   );
@@ -180,33 +184,34 @@ async function authorizeActivity(
  * - Teachers: Must own the activity
  * - Students: Must be accepted member of the classroom
  */
-router.get(
-  "/:id",
-  verifyToken, // Middleware: Decode JWT and attach user to req.user
-  wrapAsync(async (req: AuthRequest, res: Response) => {
-    // Guard: Check if database is available
-    if (!(req as any).dbAvailable) {
-      return res
-        .status(503)
-        .json({ ok: false, error: "Database not available" });
-    }
+router
+  .route("/:id")
+  .all(verifyToken) // Middleware: Decode JWT and attach user to req.user
+  .get(
+    wrapAsync(async (req: AuthRequest, res: Response) => {
+      // Guard: Check if database is available
+      if (!(req as any).dbAvailable) {
+        return res
+          .status(503)
+          .json({ ok: false, error: "Database not available" });
+      }
 
-    const { id } = req.params;
-    const userId = req.user!.userId; // ! = guaranteed by verifyToken middleware
-    const role = req.user!.role;
+      const { id } = req.params;
+      const userId = req.user!.userId; // ! = guaranteed by verifyToken middleware
+      const role = req.user!.role;
 
-    console.log("userId", userId, "Id", id);
+      console.log("userId", userId, "Id", id);
 
-    // Step 1: Check if user is authorized to view this activity
-    const auth = await authorizeActivity(id, userId, role);
-    if (!auth.ok) {
-      const status = auth.reason === "Activity not found" ? 404 : 403;
-      return res.status(status).json({ success: false, error: auth.reason });
-    }
+      // Step 1: Check if user is authorized to view this activity
+      const auth = await authorizeActivity(id, userId, role);
+      if (!auth.ok) {
+        const status = auth.reason === "Activity not found" ? 404 : 403;
+        return res.status(status).json({ success: false, error: auth.reason });
+      }
 
-    // Step 2: Fetch activity details with classroom code
-    const rows = await queryAsync<ActivityWithClassroom>(
-      `SELECT a.id,
+      // Step 2: Fetch activity details with classroom code
+      const rows = await queryAsync<ActivityWithClassroom>(
+        `SELECT a.id,
               a.classroom_id,
               a.teacher_id,
               a.title,
@@ -219,46 +224,41 @@ router.get(
       JOIN classrooms c ON c.id = a.classroom_id
       WHERE a.id = ?
       LIMIT 1`,
-      [id]
-    );
+        [id]
+      );
 
-    if (!rows.length) {
-      return res.status(404).json({ success: false, error: "Not found" });
-    }
-
-    const activity = rows[0];
-
-    // Step 3: Double-check authorization (redundant but explicit)
-    if (role === "teacher") {
-      if (activity.teacher_id !== userId) {
-        return res
-          .status(403)
-          .json({ success: false, error: "Forbidden for this activity" });
+      if (!rows.length) {
+        return res.status(404).json({ success: false, error: "Not found" });
       }
-    } else {
-      // For students, verify classroom membership again
-      const memberRows = await queryAsync<RowDataPacket>(
-        `SELECT 1
+
+      const activity = rows[0];
+
+      // Step 3: Double-check authorization (redundant but explicit)
+      if (role === "teacher") {
+        if (activity.teacher_id !== userId) {
+          return res
+            .status(403)
+            .json({ success: false, error: "Forbidden for this activity" });
+        }
+      } else {
+        // For students, verify classroom membership again
+        const memberRows = await queryAsync<RowDataPacket>(
+          `SELECT 1
          FROM classroom_members
          WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
          LIMIT 1`,
-        [activity.classroom_id, userId]
-      );
+          [activity.classroom_id, userId]
+        );
 
-      if (!memberRows.length) {
-        return res
-          .status(403)
-          .json({ success: false, error: "Forbidden for this activity" });
+        if (!memberRows.length) {
+          return res
+            .status(403)
+            .json({ success: false, error: "Forbidden for this activity" });
+        }
       }
-    }
 
-    interface InstructionWithTeacher extends InstructionEntry {
-      username: string;
-      teacher_role: string;
-    }
-
-    const instructions = await queryAsync<InstructionWithTeacher>(
-      `SELECT ai.id,
+      const instructions = await queryAsync<InstructionWithTeacher>(
+        `SELECT ai.id,
               ai.activity_id,
               ai.teacher_id,
               ai.instruction_text,
@@ -270,13 +270,50 @@ router.get(
        JOIN users u ON u.ID = ai.teacher_id
        WHERE ai.activity_id = ?
        ORDER BY ai.created_at ASC`,
-      [id]
-    );
+        [id]
+      );
 
-    // Step 4: Return activity data
-    return res.json({ success: true, activity: { ...activity, instructions } });
-  })
-);
+      // Step 4: Return activity data
+      return res.json({
+        success: true,
+        activity: { ...activity, instructions },
+      });
+    })
+  )
+  .delete(
+    wrapAsync(async (req: AuthRequest, res: Response) => {
+      if (!(req as any).dbAvailable) {
+        return res
+          .status(503)
+          .json({ success: false, error: "Database unavailable" });
+      }
+
+      const { id } = req.params;
+      const userId = req.user!.userId;
+      const role = req.user!.role;
+
+      if (role !== "teacher") {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      const rows = await queryAsync<ActivityRow>(
+        `SELECT id, teacher_id FROM activities WHERE id = ? LIMIT 1`,
+        [id]
+      );
+      if (!rows.length) {
+        return res
+          .status(404)
+          .json({ success: false, error: "Activity not found" });
+      }
+
+      if (rows[0].teacher_id !== userId) {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      await db.query(`DELETE FROM activities WHERE id = ?`, [id]);
+      return res.json({ success: true, message: "Activity deleted" });
+    })
+  );
 
 // ============================================================================
 // ROUTE: GET /:id/comments - Fetch all comments for an activity
@@ -634,12 +671,11 @@ router.post(
       const [result] = await db.query<RowDataPacket[]>(
         `INSERT INTO activities
           (classroom_id, teacher_id, title, file_path, original_name, mime_type)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?)`,
         [
           classroom.id,
           req.user!.userId,
           title.trim(),
-          instructions.trim(),
           file ? file.filename : null, // Stored filename
           file ? file.originalname : null, // Original filename for display
           file ? file.mimetype : null, // MIME type for proper handling
@@ -843,17 +879,13 @@ router.patch(
     }
 
     // Step 6: Fetch all instructions for this activity (oldest first)
-    interface InstructionWithTeacher extends InstructionEntry {
-      username: string;
-      teacher_role: string;
-    }
-
     const allInstructions = await queryAsync<InstructionWithTeacher>(
       `SELECT ai.id,
               ai.activity_id,
               ai.teacher_id,
               ai.instruction_text,
               ai.created_at,
+              ai.updated_at,
               u.username,
               u.role as teacher_role
        FROM activity_instructions ai
@@ -867,6 +899,97 @@ router.patch(
     return res.json({
       success: true,
       message: "Instruction added",
+      instructions: allInstructions,
+    });
+  })
+);
+
+router.put(
+  "/:id/instructions/:instructionId",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database not available" });
+    }
+
+    const { id, instructionId } = req.params;
+    const { instruction_text } = req.body;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Only teachers can access this
+    if (role !== "teacher") {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    // Check if the instruction text is a string
+    if (typeof instruction_text !== "string") {
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid instruction text" });
+    }
+
+    const trimmed = instruction_text.trim();
+    if (!trimmed) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Instruction cannot be empty" });
+    }
+    const safe = trimmed.slice(0, 2000);
+
+    // Verify activity ownership
+    const actRows = await queryAsync<ActivityRow>(
+      `SELECT id, teacher_id FROM activities WHERE id = ? LIMIT 1`,
+      [id]
+    );
+    if (!actRows.length) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Activity not found" });
+    }
+    if (actRows[0].teacher_id !== userId) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    // Verify instruction belongs to this activity
+    const instrRows = await queryAsync<InstructionEntry>(
+      `SELECT id FROM activity_instructions WHERE id = ? AND activity_id = ? LIMIT 1`,
+      [instructionId, id]
+    );
+    if (!instrRows.length) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Instruction not found" });
+    }
+
+    // Update instruction
+    await db.query<RowDataPacket[]>(
+      `UPDATE activity_instructions SET instruction_text = ?, updated_at = NOW() WHERE id = ?`,
+      [safe, instructionId]
+    );
+
+    // Return full instruction list (oldest first)
+    const allInstructions = await queryAsync<InstructionWithTeacher>(
+      `SELECT ai.id,
+              ai.activity_id,
+              ai.teacher_id,
+              ai.instruction_text,
+              ai.created_at,
+              ai.updated_at,
+              u.username,
+              u.role as teacher_role
+       FROM activity_instructions ai
+       JOIN users u ON u.ID = ai.teacher_id
+       WHERE ai.activity_id = ?
+       ORDER BY ai.created_at ASC`,
+      [id]
+    );
+
+    return res.json({
+      success: true,
+      message: "Instruction updated",
       instructions: allInstructions,
     });
   })
