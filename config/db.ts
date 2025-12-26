@@ -25,7 +25,7 @@ let connecting = false;
 let attempts = 0;
 
 // HOST switching helpers
-let initialHost = process.env.DB_HOST || "127.0.0.1";
+const initialHost = process.env.DB_HOST || "127.0.0.1";
 const LOCAL_FALLBACK_HOST = process.env.DB_HOST_LOCAL || "127.0.0.1";
 let currentHost = initialHost;
 let switchedToLocal = false;
@@ -55,6 +55,12 @@ async function tryConnectOnce(): Promise<boolean> {
     const database = usingLocal
       ? process.env.DB_NAME_LOCAL || process.env.DB_NAME
       : process.env.DB_NAME;
+
+    if (!database) {
+      throw new Error(
+        "Database name not configured (DB_NAME or DB_NAME_LOCAL missing)"
+      );
+    }
 
     const ssl: string | SslOptions | undefined =
       DB_SSL === "true" || DB_SSL === "1"

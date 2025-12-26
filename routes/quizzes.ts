@@ -3,7 +3,7 @@ import { verifyToken, type AuthRequest } from "../middleware/auth";
 import { queryAsync } from "../config/helpers/dbHelper";
 import wrapAsync from "../utils/wrapAsync";
 import db from "../config/db.js";
-import type { RowDataPacket, ResultSetHeader } from "mysql2/promise.js";
+import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
 const router = express.Router();
 

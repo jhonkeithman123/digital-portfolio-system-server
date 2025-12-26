@@ -10,8 +10,10 @@ import type {
   CommentRow,
   CommentReplyRow,
   InstructionEntry,
+  ActivitySubmission,
 } from "../types/db";
 import type { RowDataPacket } from "mysql2";
+import fs from "fs/promises";
 
 const router = express.Router();
 
@@ -92,6 +94,18 @@ interface AuthResult {
 interface InstructionWithTeacher extends InstructionEntry {
   username: string;
   teacher_role: string;
+}
+
+interface ReplyWithActivity extends RowDataPacket {
+  id: number;
+  comment_id: number;
+  user_id: number;
+}
+
+interface SubmissionWithUser extends ActivitySubmission {
+  username: string;
+  email: string;
+  section: string | null;
 }
 
 // ============================================================================
@@ -378,7 +392,7 @@ router
       );
 
       // Step 3: Fetch all replies for these comments (if any)
-      let repliesByComment: Record<number, ReplyWithUser[]> = {};
+      const repliesByComment: Record<number, ReplyWithUser[]> = {};
       if (comments.length > 0) {
         const ids = comments.map((c) => c.id); // Extract comment IDs
 
@@ -474,6 +488,15 @@ router
         [auth.activity!.classroom_id, id, userId, safe]
       );
 
+      if (!result || typeof result !== "object" || !("insertId" in result)) {
+        console.error("[ROUTE ERROR] Invalid result from INSERT:", result);
+        return res
+          .status(500)
+          .json({ success: false, error: "Failed to insert comment" });
+      }
+
+      const commentId = (result as any).insertId;
+
       // Step 4: Fetch the newly created comment with user details
       const inserted = await queryAsync<CommentWithUser>(
         `SELECT c.id,
@@ -489,7 +512,7 @@ router
        JOIN users u ON u.ID = c.user_id
        WHERE c.id = ?
        LIMIT 1`,
-        [result[0].insertId]
+        [commentId]
       );
 
       // Step 5: Return the comment with empty replies array
@@ -500,6 +523,87 @@ router
       });
     })
   );
+
+router.delete(
+  "/:id/comments/:commentId",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ ok: false, error: "Database not available" });
+    }
+
+    const { id, commentId } = req.params;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Authorize the activity access
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    // Define types for query results
+    interface CommentIdUser extends RowDataPacket {
+      id: number;
+      user_id: number;
+    }
+
+    // Try to delete as a top-level comment
+    const commentRows = await queryAsync<CommentIdUser>(
+      `SELECT id, user_id FROM comments WHERE id = ? AND activity_id = ? LIMIT 1`,
+      [commentId, id]
+    );
+
+    if (commentRows.length) {
+      const existing = commentRows[0];
+
+      // Verify user owns this comment
+      if (existing.user_id !== userId) {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      // Delete the comment (CASCADE will delete replies)
+      await db.query<RowDataPacket[]>(`DELETE FROM comments WHERE id = ?`, [
+        commentId,
+      ]);
+
+      return res.json({ success: true, message: "Comment deleted" });
+    }
+
+    const replyRows = await queryAsync<ReplyWithActivity>(
+      `SELECT r.id, r.comment_id, r.user_id
+       FROM comment_replies r
+       JOIN comments c ON c.id = r.comment_id
+       WHERE r.id = ? AND c.activity_id = ? LIMIT 1`,
+      [commentId, id]
+    );
+
+    if (replyRows.length) {
+      const existingReply = replyRows[0];
+
+      // Check if the users owns this reply
+      if (existingReply.user_id !== userId) {
+        return res.status(403).json({ success: false, error: "Forbidden" });
+      }
+
+      // Delete the reply
+      await db.query<RowDataPacket[]>(
+        `DELETE FROM comment_replies WHERE id = ?`,
+        [commentId]
+      );
+
+      return res.json({ success: true, message: "Reply deleted" });
+    }
+
+    // Return this if niether comment nor reply found
+    return res
+      .status(404)
+      .json({ success: false, error: "Comment or reply not found" });
+  })
+);
 
 // ============================================================================
 // ROUTE: POST /:id/comments/:commentId/replies - Add a reply to a comment
@@ -615,6 +719,53 @@ router.post(
   })
 );
 
+router.delete(
+  "/:id/comments/:commentId/replies/:replyId",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database not found" });
+    }
+
+    const { id, commentId, replyId } = req.params;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    const replyRows = await queryAsync<ReplyWithActivity>(
+      `SELECT r.id, r.comment_id, r.user_id
+       FROM comment_replies r
+       JOIN comments c ON c.id = r.comment_id
+       WHERE r.id = ? AND r.comment_id = ? AND c.activity_id = ? AND c.id = ?
+       LIMIT 1`,
+      [replyId, commentId, id, commentId]
+    );
+
+    if (!replyRows.length) {
+      return res.status(404).json({ success: false, error: "Reply not found" });
+    }
+    const existingReply = replyRows[0];
+
+    if (existingReply.user_id !== userId) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    await db.query<RowDataPacket[]>(
+      `DELETE FROM comment_replies WHERE id = ?`,
+      [replyId]
+    );
+
+    return res.json({ success: true, message: "Reply deleted" });
+  })
+);
+
 // ============================================================================
 // ROUTE: POST /create - Teacher creates a new activity
 // ============================================================================
@@ -647,7 +798,7 @@ router.post(
         return res.status(403).json({ success: false, error: "Forbidden" });
 
       // Step 2: Validate required fields
-      const { title, instructions, classroomCode } = req.body;
+      const { title, instructions, classroomCode, max_score } = req.body;
       if (!title || !instructions || !classroomCode) {
         return res
           .status(400)
@@ -668,10 +819,12 @@ router.post(
       const file = req.file || null;
 
       // Step 5: Insert activity into database
+      const maxScoreValue = parseInt(max_score, 10) || 100;
+
       const [result] = await db.query<RowDataPacket[]>(
         `INSERT INTO activities
-          (classroom_id, teacher_id, title, file_path, original_name, mime_type)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (classroom_id, teacher_id, title, file_path, original_name, mime_type, max_score)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           classroom.id,
           req.user!.userId,
@@ -679,6 +832,7 @@ router.post(
           file ? file.filename : null, // Stored filename
           file ? file.originalname : null, // Original filename for display
           file ? file.mimetype : null, // MIME type for proper handling
+          maxScoreValue,
         ]
       );
 
@@ -781,6 +935,156 @@ router.get(
 
     // Step 4: Return activities list
     return res.json({ success: true, activities });
+  })
+);
+
+// ============================================================================
+// ROUTE: POST /:id/submit - Student submits answer for an activity
+// ============================================================================
+/**
+ * Allows students to submit their work for an activity.
+ *
+ * Process:
+ * 1. Verify JWT token
+ * 2. Check role is "student"
+ * 3. Authorize student access to the activity (must be in classroom)
+ * 4. Validate submission (text or file required)
+ * 5. Handle file upload if provided
+ * 6. Insert or update submission in database
+ * 7. Return submission details
+ *
+ * Security:
+ * - Only students can submit
+ * - Must be accepted member of the classroom
+ * - One submission per student per activity (upsert logic)
+ */
+router.post(
+  "/:id/submit",
+  verifyToken,
+  upload.single("file"), // Handle optional file upload
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database unavailable" });
+    }
+
+    const { id } = req.params;
+    const { text } = req.body;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Step 1: Only students can submit
+    if (role !== "student") {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    // Step 2: Authorize student access to the activity
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    // Step 3: Validate submission (must have text or file)
+    const trimmedText = (text || "").trim();
+    const file = req.file || null;
+
+    if (!trimmedText && !file) {
+      return res.status(400).json({
+        success: false,
+        error: "Submission must include text or a file",
+      });
+    }
+
+    // Step 4: Check if student already has a submission
+    const existing = await queryAsync<ActivitySubmission>(
+      `SELECT id FROM activity_submissions 
+       WHERE activity_id = ? AND student_id = ? 
+       LIMIT 1`,
+      [id, userId]
+    );
+
+    let submissionId: number;
+
+    if (existing.length) {
+      // Update existing submission
+      submissionId = existing[0].id;
+
+      await db.query<RowDataPacket[]>(
+        `UPDATE activity_submissions 
+         SET file_path = ?, 
+             original_name = ?, 
+             mime_type = ?,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          file ? file.filename : null,
+          file ? file.originalname : null,
+          file ? file.mimetype : null,
+          submissionId,
+        ]
+      );
+    } else {
+      // Insert new submission
+      const [result] = await db.query<RowDataPacket[]>(
+        `INSERT INTO activity_submissions 
+          (activity_id, student_id, file_path, original_name, mime_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          id,
+          userId,
+          file ? file.filename : null,
+          file ? file.originalname : null,
+          file ? file.mimetype : null,
+        ]
+      );
+
+      if (!result || !("insertId" in result)) {
+        console.error("[ROUTE ERROR] Failed to insert submission:", result);
+        return res
+          .status(500)
+          .json({ success: false, error: "Failed to save submission" });
+      }
+
+      submissionId = (result as any).insertId;
+    }
+
+    // Step 5: Fetch the submission details
+    const submission = await queryAsync<
+      ActivitySubmission & {
+        username: string;
+        email: string;
+        section: string | null;
+      }
+    >(
+      `SELECT s.id,
+              s.activity_id,
+              s.student_id,
+              s.file_path,
+              s.original_name,
+              s.mime_type,
+              s.score,
+              s.graded_at,
+              s.graded_by,
+              s.created_at,
+              s.updated_at,
+              u.username,
+              u.email,
+              u.section
+       FROM activity_submissions s
+       JOIN users u ON u.ID = s.student_id
+       WHERE s.id = ?
+       LIMIT 1`,
+      [submissionId]
+    );
+
+    // Step 6: Return success
+    return res.json({
+      success: true,
+      message: existing.length ? "Submission updated" : "Submission created",
+      submission: submission[0],
+    });
   })
 );
 
@@ -1153,5 +1457,253 @@ router.patch(
   })
 );
 
+// ============================================================================
+// ROUTE: GET /:id/my-submission - Get current user's submission
+// ============================================================================
+/**
+ * Allows students to view their own submission for an activity.
+ */
+router.get(
+  "/:id/my-submission",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database unavailable" });
+    }
+
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    if (role !== "student") {
+      console.log("[DEBUG] Not a student, forbidden");
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    const submission = await queryAsync<ActivitySubmission>(
+      `SELECT id, activity_id, student_id, file_path, original_name, 
+              mime_type, score, graded_at, graded_by, created_at, updated_at
+       FROM activity_submissions 
+       WHERE activity_id = ? AND student_id = ? 
+       LIMIT 1`,
+      [id, userId]
+    );
+
+    console.log("Submission found:", submission.length > 0);
+
+    if (!submission.length) {
+      return res.json({ success: true, submission: null });
+    }
+
+    return res.json({ success: true, submission: submission[0] });
+  })
+);
+
+// ============================================================================
+// ROUTE: DELETE /:id/submission/:submissionId - Unsubmit (student only)
+// ============================================================================
+/**
+ * Allows students to delete/unsubmit their own submission.
+ */
+router.delete(
+  "/:id/submission/:submissionId",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database unavailable" });
+    }
+
+    const { id, submissionId } = req.params;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    if (role !== "student") {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    // Verify submission belongs to this student
+    const existing = await queryAsync<ActivitySubmission>(
+      `SELECT id, student_id, file_path 
+       FROM activity_submissions 
+       WHERE id = ? AND activity_id = ? 
+       LIMIT 1`,
+      [submissionId, id]
+    );
+
+    if (!existing.length) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Submission not found" });
+    }
+
+    if (existing[0].student_id !== userId) {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    // Delete file if exists
+    if (existing[0].file_path) {
+      const filePath = path.join(
+        __dirname,
+        "..",
+        "uploads",
+        "activities",
+        existing[0].file_path
+      );
+      try {
+        await fs.unlink(filePath);
+      } catch (e) {
+        console.error("Failed to delete file:", e);
+      }
+    }
+
+    // Delete submission
+    await db.query<RowDataPacket[]>(
+      `DELETE FROM activity_submissions WHERE id = ?`,
+      [submissionId]
+    );
+
+    return res.json({ success: true, message: "Submission removed" });
+  })
+);
+
+// ============================================================================
+// ROUTE: PATCH /:id/submissions/:submissionId/score - Grade a submission
+// ============================================================================
+/**
+ * Allows teachers to assign a score to a student's submission.
+ *
+ * Process:
+ * 1. Verify JWT token
+ * 2. Check role is "teacher"
+ * 3. Authorize activity ownership
+ * 4. Validate score (0 to activity.max_score)
+ * 5. Update submission with score and timestamp
+ * 6. Return updated submission
+ */
+router.patch(
+  "/:id/submissions/:submissionId/score",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database unavailable" });
+    }
+
+    const { id, submissionId } = req.params;
+    const { score } = req.body;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Only teachers can grade
+    if (role !== "teacher") {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    // Authorize activity ownership
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    // Get activity max_score
+    const activityRows = await queryAsync<ActivityRow & { max_score: number }>(
+      `SELECT id, max_score FROM activities WHERE id = ? LIMIT 1`,
+      [id]
+    );
+
+    if (!activityRows.length) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Activity not found" });
+    }
+
+    const maxScore = activityRows[0].max_score || 100;
+
+    // Validate score
+    const parsedScore = parseFloat(score);
+    if (isNaN(parsedScore) || parsedScore < 0 || parsedScore > maxScore) {
+      return res.status(400).json({
+        success: false,
+        error: `Score must be between 0 and ${maxScore}`,
+      });
+    }
+
+    // Verify submission exists and belongs to this activity
+    const subRows = await queryAsync<SubmissionWithUser>(
+      `SELECT s.id, s.activity_id
+       FROM activity_submissions s
+       WHERE s.id = ? AND s.activity_id = ?
+       LIMIT 1`,
+      [submissionId, id]
+    );
+
+    if (!subRows.length) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Submission not found" });
+    }
+
+    // Update score
+    await db.query<RowDataPacket[]>(
+      `UPDATE activity_submissions 
+       SET score = ?, graded_at = NOW(), graded_by = ?
+       WHERE id = ?`,
+      [parsedScore, userId, submissionId]
+    );
+
+    // Fetch updated submission
+    const updated = await queryAsync<
+      SubmissionWithUser & {
+        score: number | null;
+        graded_at: string | null;
+        graded_by: number | null;
+      }
+    >(
+      `SELECT s.id,
+              s.activity_id,
+              s.student_id,
+              s.file_path,
+              s.original_name,
+              s.mime_type,
+              s.score,
+              s.graded_at,
+              s.graded_by,
+              s.created_at,
+              s.updated_at,
+              u.username,
+              u.email,
+              u.section
+       FROM activity_submissions s
+       JOIN users u ON u.ID = s.student_id
+       WHERE s.id = ?
+       LIMIT 1`,
+      [submissionId]
+    );
+
+    return res.json({
+      success: true,
+      message: "Score updated",
+      submission: updated[0],
+      maxScore,
+    });
+  })
+);
 export default router;
-// Todo: Make the instructions increment but the added instructions be the teacher not replay by it

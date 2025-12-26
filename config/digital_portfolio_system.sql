@@ -1,4 +1,4 @@
--- Adminer 5.4.1 MariaDB 11.8.3-MariaDB-0+deb13u1 from Debian dump
+-- Adminer 5.4.1 MariaDB 10.4.32-MariaDB dump
 
 SET NAMES utf8;
 SET time_zone = '+00:00';
@@ -7,7 +7,7 @@ SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';
 
 SET NAMES utf8mb4;
 
-CREATE DATABASE `digital_portfolio_system` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci */;
+CREATE DATABASE `digital_portfolio_system` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */;
 USE `digital_portfolio_system`;
 
 DROP TABLE IF EXISTS `activities`;
@@ -44,7 +44,31 @@ CREATE TABLE `activity_instructions` (
   KEY `idx_created` (`created_at`),
   CONSTRAINT `activity_instructions_ibfk_1` FOREIGN KEY (`activity_id`) REFERENCES `activities` (`id`) ON DELETE CASCADE,
   CONSTRAINT `activity_instructions_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+
+DROP TABLE IF EXISTS `activity_submissions`;
+CREATE TABLE `activity_submissions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `activity_id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `file_path` varchar(255) DEFAULT NULL,
+  `original_name` varchar(255) DEFAULT NULL,
+  `mime_type` varchar(100) DEFAULT NULL,
+  `score` decimal(5,2) DEFAULT NULL,
+  `graded_at` datetime DEFAULT NULL,
+  `graded_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `fk_submission_grader` (`graded_by`),
+  KEY `idx_activity` (`activity_id`),
+  KEY `idx_student` (`student_id`),
+  KEY `idx_graded` (`graded_at`),
+  CONSTRAINT `fk_sub_activity` FOREIGN KEY (`activity_id`) REFERENCES `activities` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_sub_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE,
+  CONSTRAINT `fk_submission_grader` FOREIGN KEY (`graded_by`) REFERENCES `users` (`ID`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
 DROP TABLE IF EXISTS `classrooms`;
@@ -317,4 +341,4 @@ INSERT INTO `users` (`ID`, `email`, `username`, `section`, `password`, `role`, `
 (3,	'keithvirgenes17@gmail.com',	'Keith Justine A. Virgenes',	'DIT 1-5',	'$2b$10$CToIc872O0BODciIYqrS1uSDIU0pG8/doQ0SXcBOvzPKKaOOMeyx.',	'student',	NULL,	NULL,	0),
 (4,	'justineabdon71@gmail.com',	'131fgh',	NULL,	'$2b$10$POctQm8T.wciahfiegozPuO88tQ/B.CLxmK3l2dSwX99dr1zIPjYa',	'teacher',	NULL,	NULL,	0);
 
--- 2025-12-22 07:03:06 UTC
+-- 2025-12-26 12:46:35 UTC

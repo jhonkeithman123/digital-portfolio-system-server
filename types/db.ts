@@ -16,6 +16,7 @@ export interface ActivityRow extends RowDataPacket {
   file_path: string | null;
   original_name: string | null;
   mime_type: string | null;
+  max_score: number;
   created_at: Date;
 }
 
@@ -147,4 +148,18 @@ export interface UserRow extends RowDataPacket {
   verification_code: string | null;
   verification_expiry: Date | null;
   is_verified: 0 | 1 | null;
+}
+
+export interface ActivitySubmission extends RowDataPacket {
+  id: number;
+  activity_id: number;
+  student_id: number;
+  file_path: string | null;
+  original_name: string | null;
+  mime_type: string | null;
+  score: number;
+  graded_at: string;
+  graded_by: number;
+  created_at: string;
+  updated_at: string;
 }

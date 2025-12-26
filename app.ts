@@ -33,6 +33,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5000",
+    "http://localhost:4173",
     process.env.CLIENT_ORIGIN || "http://localhost:5173",
   ];
 
