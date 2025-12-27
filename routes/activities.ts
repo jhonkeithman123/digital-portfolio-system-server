@@ -1508,6 +1508,74 @@ router.get(
 );
 
 // ============================================================================
+// ROUTE: GET /:id/submissions - List submissions for this activity (teacher only)
+// ============================================================================
+router.get(
+  "/:id/submissions",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res
+        .status(503)
+        .json({ success: false, error: "Database not available" });
+    }
+
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const role = req.user!.role;
+
+    // Only teachers
+    if (role !== "teacher") {
+      return res.status(403).json({ success: false, error: "Forbidden" });
+    }
+
+    const auth = await authorizeActivity(id, userId, role);
+    if (!auth.ok) {
+      const status = auth.reason === "Activity not found" ? 404 : 403;
+      return res.status(status).json({ success: false, error: auth.reason });
+    }
+
+    const submissions = await queryAsync<
+      SubmissionWithUser & {
+        score: number | null;
+        graded_at: string | null;
+        graded_by: number | null;
+      }
+    >(
+      `SELECT s.id,
+              s.activity_id,
+              s.student_id,
+              s.file_path,
+              s.original_name,
+              s.mime_type,
+              s.score,
+              s.graded_at,
+              s.graded_by,
+              s.created_at,
+              s.updated_at,
+              u.username,
+              u.email,
+              u.section
+       FROM activity_submissions s
+       JOIN users u ON u.ID = s.student_id
+       WHERE s.activity_id = ?
+       ORDER BY s.created_at DESC`,
+      [id]
+    );
+
+    // Get activity max_score
+    const activityRows = await queryAsync<ActivityRow>(
+      `SELECT max_score FROM activities WHERE id = ? LIMIT 1`,
+      [id]
+    );
+
+    const maxScore = activityRows[0]?.max_score || 100;
+
+    return res.json({ success: true, submissions, maxScore });
+  })
+);
+
+// ============================================================================
 // ROUTE: DELETE /:id/submission/:submissionId - Unsubmit (student only)
 // ============================================================================
 /**

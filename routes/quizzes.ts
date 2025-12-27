@@ -1,7 +1,7 @@
 import express, { type Response } from "express";
-import { verifyToken, type AuthRequest } from "../middleware/auth";
-import { queryAsync } from "../config/helpers/dbHelper";
-import wrapAsync from "../utils/wrapAsync";
+import { verifyToken, type AuthRequest } from "../middleware/auth.js";
+import { queryAsync } from "../config/helpers/dbHelper.js";
+import wrapAsync from "../utils/wrapAsync.js";
 import db from "../config/db.js";
 import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
@@ -39,6 +39,7 @@ interface QuestionData {
   options?: string[]; // For multiple_choice and checkboxes
   correctAnswer?: string | string[] | null; // Hidden from students
   sentenceLimit?: number; // For short_answer and paragraph
+  requiresManualGrading: boolean;
 }
 
 interface PageData {
@@ -377,6 +378,7 @@ const sanitizeQuestion = (q: any, pIdx: number, qIdx: number): QuestionData => {
     id: q?.id || makeId(pIdx, qIdx),
     type: type as any,
     text: String(q?.text ?? "").trim() || "Untitled question",
+    requiresManualGrading: Boolean(q?.requiresManualGrading),
   };
 
   if (type === "multiple_choice") {
@@ -1047,7 +1049,7 @@ router
  * Shared middleware: JWT verification.
  */
 router
-  .route("/:code/quizzes/:quizId/attempts")
+  .route("/:code/quizzes/:quizId/attempt")
   .all(verifyToken)
   // ==== GET /:code/quizzes/:quizId/attempts - List attempts (teacher-only) ====
   /**
@@ -1129,9 +1131,9 @@ router
 
         // Step 2: Validate and apply status filter
         const allowedStatuses = [
-          "needs_grading",
-          "completed",
-          "in_progress",
+          "needs_grading", // Default - shows submission awaiting teacher review
+          "completed", // Fully graded
+          "in_progress", // Still taking quiz
           "all",
         ];
         const st = allowedStatuses.includes(String(status))
@@ -1417,39 +1419,81 @@ router.post(
       // Step 4: Score answers
       let score = 0;
       let maxScore = 0;
+      let manualGradingRequired = false;
+      const grading: Record<string, any> = {};
 
       qlist.forEach((q: any) => {
+        // Skip questions that require manual grading
+        if (q.requiresManualGrading) {
+          grading[q.id] = {
+            requiresManualGrading: true,
+            answer: answers?.[q.id] ?? null,
+            scored: false,
+          };
+          manualGradingRequired = true;
+          return;
+        }
+
         const correct = q.correctAnswer ?? q.answer ?? null;
         if (correct == null) return; // Skip questions without answer key
 
         maxScore += 1;
         const given = answers?.[q.id] ?? null;
+        let isCorrect;
 
         // Compare based on answer type
         if (Array.isArray(correct)) {
           // Checkboxes: array comparison
           const givenArr = Array.isArray(given) ? given.map(String) : [];
-          const equal =
+          isCorrect =
             correct.length === givenArr.length &&
             correct.every((v) => givenArr.includes(String(v)));
-          if (equal) score += 1;
         } else {
           // Multiple choice or text: string comparison
-          if (String(given) === String(correct)) score += 1;
+          isCorrect = String(given) === String(correct);
         }
+
+        if (isCorrect) score += 1;
+
+        grading[q.id] = {
+          correct: isCorrect,
+          given,
+          expected: correct,
+          scored: true,
+        };
       });
 
       // Step 5: Calculate percentage
-      const percent = maxScore ? Math.round((score / maxScore) * 100) : 0;
+      const percent = manualGradingRequired
+        ? null
+        : maxScore
+        ? Math.round((score / maxScore) * 100)
+        : 0;
+
+      const status = manualGradingRequired ? "needs_grading" : "completed";
 
       // Step 6: Update attempt
       await db.query<ResultSetHeader>(
-        "UPDATE quiz_attempts SET answers = ?, score = ?, status = 'completed', submitted_at = ? WHERE id = ?",
-        [JSON.stringify(answers || {}), percent, new Date(), attemptId]
+        "UPDATE quiz_attempts SET answers = ?, score = ?, status = ?, submitted_at = ?, grading = ? WHERE id = ?",
+        [
+          JSON.stringify(answers || {}),
+          percent,
+          status,
+          JSON.stringify(grading),
+          new Date(),
+          attemptId,
+        ]
       );
 
       // Step 7: Return score
-      res.json({ success: true, score: percent });
+      res.json({
+        success: true,
+        score: percent,
+        requiresManualGrading: manualGradingRequired,
+        message: manualGradingRequired
+          ? "Submitted. Waiting for teacher to grade."
+          : "Quiz submitted and graded.",
+      });
     } catch (err) {
       const error = err as Error;
       console.error("Error submitting attempt:", error.message);

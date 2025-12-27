@@ -7,6 +7,9 @@ import { fileURLToPath } from "url";
 import cookieParser from "cookie-parser";
 import type { Express, Request, Response, NextFunction } from "express";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import auth from "./routes/auth";
 import quizzes from "./routes/quizzes";
 import mainRoute from "./routes/default";
@@ -14,13 +17,11 @@ import security from "./routes/security";
 import classrooms from "./routes/classrooms";
 import activities from "./routes/activities";
 import showcase from "./routes/showcase";
+import uploadStatic from "./routes/uploads";
 
 import db from "./config/db";
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app: Express = express();
 app.set("trust proxy", 1);
@@ -173,6 +174,8 @@ app.get("/", (req: Request, res: Response, next: NextFunction): void => {
     }
   );
 });
+
+app.use("/uploads", uploadStatic);
 
 // API routes
 app.use("/", mainRoute);

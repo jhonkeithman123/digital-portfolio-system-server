@@ -459,7 +459,27 @@ router.post(
     }
 
     const normedEmail = (email || "").toLowerCase();
-    const sectionVal = section ? section.trim() : null;
+    let sectionVal = section ? section.trim() : null;
+
+    if (role === "student" && section && section.trim()) {
+      const trimmedSection = section.trim().toUpperCase();
+
+      // Validate format: STRAND-SECTION (e.g., STEM-1, ABM-2A)
+      const sectionPattern = /^[A-Z0-9]+-[A-Z0-9]+$/;
+
+      if (!sectionPattern.test(trimmedSection)) {
+        console.warn(
+          "[AUTH] signup validation failed - invalid section format"
+        );
+        return res.status(400).json({
+          success: false,
+          error:
+            "Section must follow format: STRAND-SECTION (e.g., STEM-1, ABM-2A, ICT-12)",
+        });
+      }
+
+      sectionVal = trimmedSection;
+    }
 
     try {
       // Step 2: Check if email already exists
@@ -491,6 +511,7 @@ router.post(
       console.info("[AUTH] signup created user", {
         insertId,
         email: normedEmail,
+        section: sectionVal,
       });
 
       // Step 6: Return success (user should verify email next)
