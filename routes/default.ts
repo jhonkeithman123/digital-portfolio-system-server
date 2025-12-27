@@ -368,6 +368,55 @@ router.post(
   })
 );
 
+// Delete batch notifications
+router.delete(
+  "/notifications/delete-batch",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.userId;
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No notification IDs provided" });
+    }
+
+    try {
+      const placeholders = ids.map(() => "?").join(",");
+      await queryAsync(
+        `DELETE FROM notifications WHERE id IN (${placeholders}) AND recipient_id = ?`,
+        [...ids, userId]
+      );
+
+      res.json({ success: true, message: "Notifications deleted" });
+    } catch (err) {
+      console.error("Error deleting notifications:", err);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  })
+);
+
+// Delete all notifications
+router.delete(
+  "/notifications/delete-all",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.userId;
+
+    try {
+      await queryAsync(`DELETE FROM notifications WHERE recipient_id = ?`, [
+        userId,
+      ]);
+
+      res.json({ success: true, message: "All notifications deleted" });
+    } catch (err) {
+      console.error("Error deleting all notifications:", err);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  })
+);
+
 // ============================================================================
 // ROUTE: GET /users/sections - Get all distinct student sections
 // ============================================================================

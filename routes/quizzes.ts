@@ -4,6 +4,7 @@ import { queryAsync } from "../config/helpers/dbHelper.js";
 import wrapAsync from "../utils/wrapAsync.js";
 import db from "../config/db.js";
 import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
+import createNotification from "../config/createNotification.js";
 
 const router = express.Router();
 
@@ -1474,7 +1475,7 @@ router.post(
 
       // Step 6: Update attempt
       await db.query<ResultSetHeader>(
-        "UPDATE quiz_attempts SET answers = ?, score = ?, status = ?, submitted_at = ?, grading = ? WHERE id = ?",
+        "UPDATE quiz_attempts SET answers = ?, score = ?, status = ?, grading = ?, submitted_at = ? WHERE id = ?",
         [
           JSON.stringify(answers || {}),
           percent,
@@ -1484,6 +1485,29 @@ router.post(
           attemptId,
         ]
       );
+
+      // Send notification if auto-graded
+      try {
+        if (status === "completed") {
+          const [quizRow] = await queryAsync<
+            QuizRow & { title: string; teacher_id: number }
+          >("SELECT title, teacher_id FROM quizzes WHERE id = ? LIMIT 1", [
+            quizId,
+          ]);
+
+          await createNotification({
+            recipientId: studentId,
+            senderId: quizRow?.teacher_id ?? null,
+            type: "grade",
+            message: `Your quiz "${
+              quizRow?.title || "Quiz"
+            }" was graded: ${percent}%.`,
+            link: `/quizzes/${req.params.code}/quizzes/${quizId}/results`,
+          });
+        }
+      } catch (e) {
+        console.error("[notify] quiz submit grade:", (e as Error).message);
+      }
 
       // Step 7: Return score
       res.json({
@@ -1619,11 +1643,97 @@ router.patch(
         ]
       );
 
+      // Get attempt student_id
+      const [att] = await queryAsync<QuizAttemptRow & { student_id: number }>(
+        "SELECT id, student_id FROM quiz_attempts WHERE id = ? LIMIT 1",
+        [attemptId]
+      );
+
+      try {
+        // Send notification
+        const [quizRow] = await queryAsync<QuizRow & { title: string }>(
+          "SELECT title FROM quizzes WHERE id = ? LIMIT 1",
+          [quizId]
+        );
+        if (att && quizRow) {
+          await createNotification({
+            recipientId: att.student_id,
+            senderId: req.user!.userId,
+            type: "grade",
+            message: `Your quiz "${quizRow?.title || "Quiz"}" was graded.`,
+            link: `/quizzes/${code}/quizzes/${quizId}/results`,
+          });
+          console.log("[NOTIFY] Quiz manual grade notification send");
+        }
+      } catch (e) {
+        console.error("[notify] quiz manual grade:", (e as Error).message);
+      }
+
       // Step 4: Return success
       res.json({ success: true, message: "Attempt graded" });
     } catch (err) {
       const error = err as Error;
       console.error("Error grading attempt:", error.message);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  })
+);
+
+router.get(
+  "/:code/quizzes/:quizId/my-attempts",
+  verifyToken,
+  wrapAsync(async (req: AuthRequest, res: Response) => {
+    if (!(req as any).dbAvailable) {
+      return res.status(503).json({ error: "Database not available" });
+    }
+
+    const { code, quizId } = req.params;
+    const studentId = req.user!.userId;
+
+    try {
+      // Fetch student's own attempts
+      const attempts = await queryAsync<QuizAttemptRow>(
+        `SELECT qa.* 
+         FROM quiz_attempts qa
+         JOIN quizzes q ON q.id = qa.quiz_id
+         JOIN classrooms c ON c.id = q.classroom_id
+         WHERE c.code = ? AND qa.quiz_id = ? AND qa.student_id = ?
+         ORDER BY qa.attempt_no DESC`,
+        [code, quizId, studentId]
+      );
+
+      // Parse JSON fields
+      const out = attempts.map((a) => ({
+        id: a.id,
+        quiz_id: a.quiz_id,
+        student_id: a.student_id,
+        attempt_no: a.attempt_no,
+        status: a.status,
+        score: a.score,
+        answers: (() => {
+          try {
+            return JSON.parse(a.answers || "{}");
+          } catch {
+            return {};
+          }
+        })(),
+        started_at: a.started_at,
+        submitted_at: a.submitted_at,
+        expires_at: a.expires_at,
+        grading: (() => {
+          try {
+            return JSON.parse(a.grading || "{}");
+          } catch {
+            return {};
+          }
+        })(),
+        comment: a.comment,
+      }));
+
+      res.json({ success: true, attempts: out });
+    } catch (err) {
+      const error = err as Error;
+      console.error("Error fetching student attempts:", error.message);
       res.status(500).json({ success: false, message: "Server error" });
     }
   })

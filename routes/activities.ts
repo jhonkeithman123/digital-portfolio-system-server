@@ -12,6 +12,7 @@ import type {
   InstructionEntry,
   ActivitySubmission,
 } from "../types/db";
+import createNotification from "../config/createNotification";
 import type { RowDataPacket } from "mysql2";
 import fs from "fs/promises";
 
@@ -1765,6 +1766,20 @@ router.patch(
        LIMIT 1`,
       [submissionId]
     );
+
+    try {
+      console.log("Creating notification");
+      const activityTitle = activityRows[0]?.title || "Activity";
+      await createNotification({
+        recipientId: updated[0].student_id,
+        senderId: userId,
+        type: "grade",
+        message: `Your activity "${activityTitle}" was graded ${parsedScore}/${maxScore}.`,
+        link: `/activity/${id}/view`,
+      });
+    } catch (e) {
+      console.error("[notify] activity grade:", (e as Error).message);
+    }
 
     return res.json({
       success: true,

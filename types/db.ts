@@ -85,7 +85,7 @@ export interface LogRow extends RowDataPacket {
   role: string;
 }
 
-export type NotificationType = "invite" | "quiz" | "feedback" | "system";
+export type NotificationType = "invite" | "quiz" | "system" | "grade";
 
 export interface NotificationRow extends RowDataPacket {
   id: number;
