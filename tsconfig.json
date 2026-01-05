@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "types": ["express"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": false,
+    "erasableSyntaxOnly": true
+  },
+  "include": ["./*.ts", "./routes/*.ts", "types/*.ts"]
+}
