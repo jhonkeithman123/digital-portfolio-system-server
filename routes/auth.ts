@@ -1,25 +1,21 @@
 import express, { type Response } from "express";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
-import { setAuthCookie, clearAuthCookie } from "../utils/authCookies";
-import wrapAsync from "../utils/wrapAsync";
+import { setAuthCookie, clearAuthCookie } from "utils/authCookies";
+import wrapAsync from "utils/wrapAsync";
 
-import { AuthRequest, verifyToken } from "../middleware/auth";
-import { sendVerificationEmail } from "../config/sendVerificationEmail";
-import {
-  findOneUserBy,
-  insertRecord,
-  updateRecord,
-} from "../config/helpers/dbHelper";
-import { generateToken } from "../config/helpers/generateToken";
-import { createSession } from "../config/helpers/createSession";
+import { AuthRequest, verifyToken } from "middleware/auth";
+import { sendVerificationEmail } from "config/sendVerificationEmail";
+import { findOneUserBy, insertRecord, updateRecord } from "helpers/dbHelper";
+import { generateToken } from "helpers/generateToken";
+import { createSession } from "helpers/createSession";
 import {
   generateVerificationCode,
   isVerificationCodeValid,
-} from "../config/helpers/verification";
-import { queryAsync } from "../config/helpers/dbHelper";
+} from "helpers/verification";
+import { queryAsync } from "helpers/dbHelper";
 import { RowDataPacket } from "mysql2/promise";
-import { UserRow } from "../types/db";
+import { UserRow } from "types/db";
 
 dotenv.config();
 
@@ -67,7 +63,7 @@ router.get(
   verifyToken, // Middleware: Decode JWT and attach user to req.user
   wrapAsync(async (req: AuthRequest, res: Response) => {
     console.info(
-      `[AUTH] GET /session entered ${new Date().toISOString()} ip=${req.ip}`
+      `[AUTH] GET /session entered ${new Date().toISOString()} ip=${req.ip}`,
     );
     const userId = req.user!.userId; // Guaranteed by verifyToken middleware
     console.log("User id:", userId);
@@ -95,7 +91,7 @@ router.get(
       console.error("[AUTH] GET /session error:", error?.stack || error);
       return res.status(500).json({ error: "Internal server error." });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -116,7 +112,7 @@ router.get(
   verifyToken,
   wrapAsync(async (req: AuthRequest, res: Response) => {
     console.info(
-      `[AUTH] GET /me entered ${new Date().toISOString()} ip=${req.ip}`
+      `[AUTH] GET /me entered ${new Date().toISOString()} ip=${req.ip}`,
     );
 
     // Guard: Check if database is available
@@ -131,7 +127,7 @@ router.get(
       // Query with field aliasing (username AS name)
       const users = await queryAsync<UserMeRow>(
         "SELECT ID as id, username AS name, email, role, section FROM users WHERE ID = ?",
-        [req.user!.userId]
+        [req.user!.userId],
       );
       const user = users[0];
 
@@ -149,7 +145,7 @@ router.get(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -178,7 +174,7 @@ router.patch(
     console.info(
       `[AUTH] PATCH /me/section entered ${new Date().toISOString()} ip=${
         req.ip
-      }`
+      }`,
     );
 
     if (!(req as any).dbAvailable) {
@@ -209,7 +205,7 @@ router.patch(
       // Step 3: Update section only if currently NULL or empty
       const result = await queryAsync<RowDataPacket>(
         "UPDATE users SET section = ? WHERE ID = ? AND role = 'student' AND (section IS NULL OR section = '')",
-        [section, req.user!.userId]
+        [section, req.user!.userId],
       );
 
       // Step 4: Check if update actually happened
@@ -232,7 +228,7 @@ router.patch(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -282,7 +278,7 @@ router.post(
       } bodyPreview=${JSON.stringify({
         email: req.body?.email,
         role: req.body?.role,
-      }).slice(0, 300)}`
+      }).slice(0, 300)}`,
     );
 
     if (!(req as any).dbAvailable) {
@@ -334,7 +330,7 @@ router.post(
           username: user.username,
           section: user.section,
         },
-        "24h" // Token valid for 8 hours
+        "24h", // Token valid for 8 hours
       );
       console.info("[AUTH] generateToken done", { tokenExists: !!token });
 
@@ -342,15 +338,15 @@ router.post(
       const promiseWithTimeout = <T>(
         p: Promise<T>,
         ms: number,
-        label: string
+        label: string,
       ): Promise<T> =>
         Promise.race([
           p,
           new Promise<never>((_, rej) =>
             setTimeout(
               () => rej(new Error(`${label} timed out after ${ms}ms`)),
-              ms
-            )
+              ms,
+            ),
           ),
         ]);
 
@@ -359,14 +355,14 @@ router.post(
       await promiseWithTimeout(
         createSession(user.ID, token, expiresAt),
         8000,
-        "createSession"
+        "createSession",
       );
       console.info("[AUTH] createSession done");
 
       // Step 6: Set httpOnly cookie with token
       setAuthCookie(res, token);
       console.info(
-        `[AUTH] login responding ${new Date().toISOString()} ip=${req.ip}`
+        `[AUTH] login responding ${new Date().toISOString()} ip=${req.ip}`,
       );
 
       // Step 7: Return user data (no password!)
@@ -385,7 +381,7 @@ router.post(
       console.error("[AUTH] Login error:", err?.stack || err?.message || error);
       return res.status(500).json({ error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -438,7 +434,7 @@ router.post(
         email: req.body?.email,
         name: req.body?.name,
         role: req.body?.role,
-      }).slice(0, 300)}`
+      }).slice(0, 300)}`,
     );
 
     if (!(req as any).dbAvailable) {
@@ -469,7 +465,7 @@ router.post(
 
       if (!sectionPattern.test(trimmedSection)) {
         console.warn(
-          "[AUTH] signup validation failed - invalid section format"
+          "[AUTH] signup validation failed - invalid section format",
         );
         return res.status(400).json({
           success: false,
@@ -491,7 +487,7 @@ router.post(
       // Step 3: Check if username already exists
       const existingUsername = await findOneUserBy<UserRow>(
         "username",
-        username
+        username,
       );
       if (existingUsername)
         return res.status(409).json({ error: "Username already exists." });
@@ -525,7 +521,7 @@ router.post(
       console.error("[AUTH] Signup Error:", err?.stack || error);
       return res.status(500).json({ error: "Internal Server Error." });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -561,7 +557,7 @@ router.post(
       } bodyPreview=${JSON.stringify({
         email: req.body?.email,
         role: req.body?.role,
-      }).slice(0, 200)}`
+      }).slice(0, 200)}`,
     );
 
     if (!(req as any).dbAvailable) {
@@ -586,7 +582,7 @@ router.post(
       const user = await findOneUserBy<UserRow>("email", normEmail);
       if (!user || user.role !== role) {
         console.warn(
-          `[AUTH] request-verification user not found ${normEmail} role=${role}`
+          `[AUTH] request-verification user not found ${normEmail} role=${role}`,
         );
         return res.status(404).json({ error: "User not found." });
       }
@@ -605,7 +601,7 @@ router.post(
           },
           {
             email: normEmail,
-          }
+          },
         );
 
         // Send email with code
@@ -619,7 +615,7 @@ router.post(
       } else {
         // Step 4b: Code still active - don't send duplicate
         console.info(
-          `[AUTH] request-verification code active for ${normEmail} until ${formatted}`
+          `[AUTH] request-verification code active for ${normEmail} until ${formatted}`,
         );
         return res.json({
           success: true,
@@ -631,7 +627,7 @@ router.post(
       console.error("[AUTH] request-verification error:", err?.stack || error);
       return res.status(500).json({ error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -659,7 +655,7 @@ router.post(
     console.info(
       `[AUTH] verify-code entered ${new Date().toISOString()} ip=${
         req.ip
-      } bodyPreview=${JSON.stringify({ email: req.body?.email }).slice(0, 200)}`
+      } bodyPreview=${JSON.stringify({ email: req.body?.email }).slice(0, 200)}`,
     );
 
     if (!(req as any).dbAvailable) {
@@ -698,7 +694,7 @@ router.post(
         },
         {
           email: normEmail,
-        }
+        },
       );
 
       console.info("[AUTH] verify-code success", { email: normEmail });
@@ -708,7 +704,7 @@ router.post(
       console.error("[AUTH] verify-code error:", err?.stack || error);
       return res.status(500).json({ error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -738,7 +734,7 @@ router.patch(
     console.info(
       `[AUTH] reset-password entered ${new Date().toISOString()} ip=${
         req.ip
-      } bodyPreview=${JSON.stringify({ email: req.body?.email }).slice(0, 200)}`
+      } bodyPreview=${JSON.stringify({ email: req.body?.email }).slice(0, 200)}`,
     );
 
     if (!(req as any).dbAvailable) {
@@ -775,7 +771,7 @@ router.patch(
         },
         {
           email: normEmail,
-        }
+        },
       );
 
       console.info("[AUTH] reset-password success", { email: normEmail });
@@ -788,7 +784,7 @@ router.patch(
       console.error("[AUTH] reset-password error:", error?.stack || error);
       return res.status(500).json({ error: "Internal server error." });
     }
-  })
+  }),
 );
 
 export default router;

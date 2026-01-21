@@ -1,8 +1,8 @@
 import express, { type Response } from "express";
-import { verifyToken, type AuthRequest } from "../middleware/auth";
-import { queryAsync } from "../config/helpers/dbHelper";
-import wrapAsync from "../utils/wrapAsync";
-import db from "../config/db";
+import { verifyToken, type AuthRequest } from "middleware/auth";
+import { queryAsync } from "config/helpers/dbHelper";
+import wrapAsync from "utils/wrapAsync";
+import db from "config/db";
 import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
 const router = express.Router();
@@ -122,7 +122,7 @@ router.get(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -192,7 +192,7 @@ router.post(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -252,7 +252,7 @@ router.post(
         `UPDATE notifications 
          SET is_read = TRUE 
          WHERE recipient_id = ? AND is_read = FALSE`,
-        [userId]
+        [userId],
       );
 
       // Step 2: Return success
@@ -264,7 +264,7 @@ router.post(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -353,7 +353,7 @@ router.post(
         `UPDATE notifications 
          SET is_read = TRUE 
          WHERE recipient_id = ? AND id IN (${placeholders})`,
-        [userId, ...ids] // userId first, then all IDs
+        [userId, ...ids], // userId first, then all IDs
       );
 
       // Step 5: Return success with count of updated rows
@@ -365,7 +365,7 @@ router.post(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // Delete batch notifications
@@ -386,7 +386,7 @@ router.delete(
       const placeholders = ids.map(() => "?").join(",");
       await queryAsync(
         `DELETE FROM notifications WHERE id IN (${placeholders}) AND recipient_id = ?`,
-        [...ids, userId]
+        [...ids, userId],
       );
 
       res.json({ success: true, message: "Notifications deleted" });
@@ -394,7 +394,7 @@ router.delete(
       console.error("Error deleting notifications:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // Delete all notifications
@@ -414,7 +414,7 @@ router.delete(
       console.error("Error deleting all notifications:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -479,7 +479,7 @@ router.get(
       // Step 1: Query distinct sections (excludes NULL, sorted)
       const rows = await queryAsync<SectionRow>(
         "SELECT DISTINCT section FROM users WHERE role='student' AND section IS NOT NULL ORDER BY section ASC",
-        []
+        [],
       );
 
       // Step 2: Extract section values and return
@@ -492,7 +492,7 @@ router.get(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -604,7 +604,7 @@ router.get(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -705,7 +705,7 @@ router.patch(
       // Step 4: Update student section
       await db.query<ResultSetHeader>(
         "UPDATE users SET section = ? WHERE id = ? AND role='student'",
-        [sectionValue, studentId]
+        [sectionValue, studentId],
       );
 
       // Step 5: Return success
@@ -717,7 +717,7 @@ router.patch(
         .status(500)
         .json({ success: false, message: "Internal server error" });
     }
-  })
+  }),
 );
 
 export default router;

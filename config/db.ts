@@ -8,7 +8,7 @@ import type {
   FieldPacket,
   SslOptions,
 } from "mysql2/promise";
-import type { DBParams } from "../types/db";
+import type { DBParams } from "types/db";
 
 dotenv.config();
 
@@ -44,7 +44,7 @@ async function tryConnectOnce(): Promise<boolean> {
     const port = Number(
       usingLocal
         ? process.env.DB_PORT_LOCAL || process.env.DB_PORT || 3306
-        : process.env.DB_PORT || 3306
+        : process.env.DB_PORT || 3306,
     );
     const user = usingLocal
       ? process.env.DB_USER_LOCAL || process.env.DB_USER
@@ -58,7 +58,7 @@ async function tryConnectOnce(): Promise<boolean> {
 
     if (!database) {
       throw new Error(
-        "Database name not configured (DB_NAME or DB_NAME_LOCAL missing)"
+        "Database name not configured (DB_NAME or DB_NAME_LOCAL missing)",
       );
     }
 
@@ -90,7 +90,7 @@ async function tryConnectOnce(): Promise<boolean> {
     console.log(
       "DB connected:",
       `${host}:${port}`,
-      `(localFallback=${usingLocal})`
+      `(localFallback=${usingLocal})`,
     );
     eventBus.emit("connected");
     return true;
@@ -104,22 +104,20 @@ async function tryConnectOnce(): Promise<boolean> {
     const code = (err as Error)?.message || String(err);
     console.warn(
       `DB connect attempt ${attempts} to ${currentHost} failed:`,
-      code
+      code,
     );
     return false;
   }
 }
 
 async function queryWithTimeout<
-  T extends
-    | RowDataPacket[]
-    | ResultSetHeader
-    | ResultSetHeader[] = RowDataPacket[]
+  T extends RowDataPacket[] | ResultSetHeader | ResultSetHeader[] =
+    RowDataPacket[],
 >(
   sql: string,
   params: DBParams = [],
   timeoutMs: number = 8000,
-  maxRetries: number = 2
+  maxRetries: number = 2,
 ): Promise<any> {
   const transientCodes = new Set([
     "ECONNRESET",
@@ -146,8 +144,8 @@ async function queryWithTimeout<
       const timeout = new Promise<never>((_, rej) =>
         setTimeout(
           () => rej(new Error(`DB query timed out after ${timeoutMs}ms`)),
-          timeoutMs
-        )
+          timeoutMs,
+        ),
       );
       const result = (await Promise.race([p, timeout])) as [T, FieldPacket[]];
 
@@ -156,7 +154,7 @@ async function queryWithTimeout<
         `[DB] query OK (${dur}ms) sql=${sql
           .split(/\s+/)
           .slice(0, 6)
-          .join(" ")} paramsLen=${params.length}`
+          .join(" ")} paramsLen=${params.length}`,
       );
 
       // return the raw result ([rows, fields]) so callers expecting that shape keep working
@@ -170,7 +168,7 @@ async function queryWithTimeout<
         `[DB] query ERR (${dur}ms) sql=${sql
           .split(/\s+/)
           .slice(0, 6)
-          .join(" ")} err=${errMsg}`
+          .join(" ")} err=${errMsg}`,
       );
 
       if (attempt < maxRetries && transientCodes.has(errCode)) {
@@ -178,7 +176,7 @@ async function queryWithTimeout<
         console.info(
           `[DB] transient error ${errCode} - retrying attempt ${
             attempt + 1
-          } after ${backoff}ms`
+          } after ${backoff}ms`,
         );
         await sleep(backoff);
         continue;
@@ -204,7 +202,7 @@ async function connectLoop() {
       attempts >= 3
     ) {
       console.warn(
-        `Failed to connect to remote DB at ${initialHost} after ${attempts} attempts. Switching to local DB host ${LOCAL_FALLBACK_HOST}`
+        `Failed to connect to remote DB at ${initialHost} after ${attempts} attempts. Switching to local DB host ${LOCAL_FALLBACK_HOST}`,
       );
       currentHost = LOCAL_FALLBACK_HOST;
       switchedToLocal = true;
@@ -216,23 +214,26 @@ async function connectLoop() {
     // If SKIP_DB_ON_START true and first attempts exhausted, stop trying immediately
     if (SKIP_DB_ON_START === "true" && attempts > 0) {
       console.warn(
-        "SKIP_DB_ON_START=true — continuing without DB. Will still retry in background."
+        "SKIP_DB_ON_START=true — continuing without DB. Will still retry in background.",
       );
       break;
     }
 
     const backoff = Math.min(
       Number(DB_RETRY_BACKOFF_MS) * Math.max(1, attempts),
-      60_000
+      60_000,
     );
     await new Promise((r) => setTimeout(r, backoff));
   }
   connecting = false;
   // If we are not connected, keep trying in background periodically
   if (!pool) {
-    setInterval(async () => {
-      if (!pool) await tryConnectOnce();
-    }, Math.max(5000, Number(DB_RETRY_BACKOFF_MS)));
+    setInterval(
+      async () => {
+        if (!pool) await tryConnectOnce();
+      },
+      Math.max(5000, Number(DB_RETRY_BACKOFF_MS)),
+    );
   }
 }
 
@@ -246,14 +247,12 @@ async function getPool(): Promise<Pool | null> {
 
 // mysql2 returns [rows, fields] tuples
 type QueryResult<
-  T extends RowDataPacket[] | ResultSetHeader | ResultSetHeader[]
+  T extends RowDataPacket[] | ResultSetHeader | ResultSetHeader[],
 > = [T, FieldPacket[]];
 
 async function query<
-  T extends
-    | RowDataPacket[]
-    | ResultSetHeader
-    | ResultSetHeader[] = RowDataPacket[]
+  T extends RowDataPacket[] | ResultSetHeader | ResultSetHeader[] =
+    RowDataPacket[],
 >(sql: string, params: DBParams = []): Promise<QueryResult<T>> {
   return queryWithTimeout<T>(sql, params);
 }

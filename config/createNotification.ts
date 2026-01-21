@@ -1,5 +1,5 @@
 import type { ResultSetHeader } from "mysql2/promise";
-import type { NotificationType, DBParam } from "../types/db";
+import type { NotificationType, DBParam } from "types/db";
 import db from "./db";
 
 export interface CreateNotificationInput {

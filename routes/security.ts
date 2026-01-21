@@ -1,7 +1,7 @@
 import express, { type Response } from "express";
-import type { AuthRequest } from "../middleware/auth";
-import { queryAsync } from "../config/helpers/dbHelper";
-import wrapAsync from "../utils/wrapAsync";
+import type { AuthRequest } from "middleware/auth";
+import { queryAsync } from "helpers/dbHelper";
+import wrapAsync from "utils/wrapAsync";
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ router.post(
 
     console.error("CSP Violation", req.body);
     res.status(204).end();
-  }
+  },
 );
 
 router.post(
@@ -31,7 +31,7 @@ router.post(
     }
     const { type, detectedAt, role, userId } = req.body;
     const logMessage = `Tampering detected at ${new Date(
-      detectedAt
+      detectedAt,
     ).toLocaleString()} - type: ${type}, role: ${role}, User ID: ${
       userId ?? "unknown"
     }`;
@@ -44,7 +44,7 @@ router.post(
       console.error("Failed to log tampering:", err);
       return res.status(500).json({ error: "Failed to log tampering" });
     }
-  })
+  }),
 );
 
 export default router;

@@ -1,6 +1,5 @@
 import express, { type Response } from "express";
-import type { AuthRequest } from "../middleware/auth";
-import { verifyToken } from "../middleware/auth";
+import { verifyToken, type AuthRequest } from "middleware/auth";
 
 const router = express.Router();
 
@@ -22,7 +21,7 @@ router.get(
         error: "Internal server error",
       });
     }
-  }
+  },
 );
 
 export default router;

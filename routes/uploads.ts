@@ -22,7 +22,7 @@ router.use(
       } else if (filePath.endsWith(".docx")) {
         res.setHeader(
           "Content-Type",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         );
       }
 
@@ -30,7 +30,7 @@ router.use(
         res.setHeader("Content-Disposition", "inline");
       }
     },
-  })
+  }),
 );
 
 export default router;

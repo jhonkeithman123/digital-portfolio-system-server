@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
-import { extractToken } from "../utils/authCookies";
+import { extractToken } from "utils/authCookies";
 import type { Request, Response, NextFunction } from "express";
-import type { TokenPayload } from "../config/helpers/generateToken";
+import type { TokenPayload } from "helpers/generateToken";
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;
@@ -10,7 +10,7 @@ export interface AuthRequest extends Request {
 export const verifyToken = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Response | void => {
   const token = extractToken(req);
 
@@ -26,7 +26,7 @@ export const verifyToken = (
     console.warn(
       `[AUTH] verifyToken FAIL: No token ${new Date().toString()} ${
         req.method
-      } ${req.originalUrl}`
+      } ${req.originalUrl}`,
     );
     return res
       .status(401)
@@ -45,7 +45,7 @@ export const verifyToken = (
     const decoded = jwt.verify(token, secret) as TokenPayload;
     (req as AuthRequest).user = decoded;
     console.info(
-      `[AUTH] verifyToken OK: userId=${decoded.userId} ${req.method} ${req.originalUrl}`
+      `[AUTH] verifyToken OK: userId=${decoded.userId} ${req.method} ${req.originalUrl}`,
     );
 
     next();
@@ -53,7 +53,7 @@ export const verifyToken = (
     const msg = (err as Error)?.message || "Invalid token";
     console.warn(
       `[AUTH] verifyToken FAIL: ${msg} ${req.method} ${req.originalUrl}`,
-      { tokenPreview: token?.substring(0, 20) }
+      { tokenPreview: token?.substring(0, 20) },
     );
 
     return res.status(401).json({

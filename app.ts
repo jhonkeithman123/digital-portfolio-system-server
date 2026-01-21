@@ -10,16 +10,16 @@ import type { Express, Request, Response, NextFunction } from "express";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import auth from "./routes/auth";
-import quizzes from "./routes/quizzes";
-import mainRoute from "./routes/default";
-import security from "./routes/security";
-import classrooms from "./routes/classrooms";
-import activities from "./routes/activities";
-import showcase from "./routes/showcase";
-import uploadStatic from "./routes/uploads";
+import auth from "routes/auth";
+import quizzes from "routes/quizzes";
+import mainRoute from "routes/default";
+import security from "routes/security";
+import classrooms from "routes/classrooms";
+import activities from "routes/activities";
+import showcase from "routes/showcase";
+import uploadStatic from "routes/uploads";
 
-import db from "./config/db";
+import db from "config/db";
 
 dotenv.config();
 
@@ -40,7 +40,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // Log CORS attempt
   console.log(
-    `[CORS] ${req.method} ${req.originalUrl} from origin: ${origin || "none"}`
+    `[CORS] ${req.method} ${req.originalUrl} from origin: ${origin || "none"}`,
   );
 
   // Set origin to the requesting origin if it's allowed
@@ -58,7 +58,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.header("Access-Control-Allow-Credentials", "true");
   res.header(
     "Access-Control-Allow-Methods",
-    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   );
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
@@ -85,7 +85,7 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
   console.info(
     `[REQ START] ${new Date().toISOString()} ${req.ip} ${req.method} ${
       req.originalUrl
-    } origin=${origin}`
+    } origin=${origin}`,
   );
 
   res.on("finish", () => {
@@ -93,7 +93,7 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
     console.info(
       `[REQ END]   ${new Date().toISOString()} ${req.ip} ${req.method} ${
         req.originalUrl
-      } status=${res.statusCode} dur=${duration}ms`
+      } status=${res.statusCode} dur=${duration}ms`,
     );
   });
 
@@ -171,7 +171,7 @@ app.get("/", (req: Request, res: Response, next: NextFunction): void => {
         return res.status(500).json({ error: "Template render failed" });
       }
       res.type("html").send(html);
-    }
+    },
   );
 });
 
@@ -215,7 +215,7 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
   // If it's a browser trying to access any route other than "/" or "/redirect"
   if (isBrowser && req.path !== "/") {
     console.log(
-      `[SECURITY] Browser detected accessing ${req.path}, redirecting to /`
+      `[SECURITY] Browser detected accessing ${req.path}, redirecting to /`,
     );
     return res.redirect(302, "/");
   }
@@ -248,7 +248,8 @@ app.get("/redirect", (req: Request, res: Response): void => {
   try {
     const url = new URL(targetUrl);
     const isAllowed = allowedDomains.some(
-      (domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`)
+      (domain) =>
+        url.hostname === domain || url.hostname.endsWith(`.${domain}`),
     );
 
     if (isAllowed) {
@@ -256,7 +257,7 @@ app.get("/redirect", (req: Request, res: Response): void => {
       return res.redirect(302, targetUrl);
     } else {
       console.log(
-        `[SECURITY] Blocked redirect to unauthorized domain: ${url.hostname}`
+        `[SECURITY] Blocked redirect to unauthorized domain: ${url.hostname}`,
       );
       return res.redirect(302, "/");
     }
@@ -276,7 +277,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
     `[UNHANDLED ERROR] ${new Date().toISOString()} ${req.method} ${
       req.originalUrl
     }`,
-    err?.stack || err
+    err?.stack || err,
   );
 
   if (!res.headersSent) {
@@ -325,12 +326,12 @@ function tryListen(port: number, attemptsLeft: number) {
       if (attemptsLeft > 0) {
         const nextPort = port + 1;
         console.log(
-          `🔄 Trying port ${nextPort} (${attemptsLeft - 1} attempts remaining)`
+          `🔄 Trying port ${nextPort} (${attemptsLeft - 1} attempts remaining)`,
         );
         tryListen(nextPort, attemptsLeft - 1);
       } else {
         console.error(
-          `❌ No available ports after ${MAX_ATTEMPTS} attempts. Exiting.`
+          `❌ No available ports after ${MAX_ATTEMPTS} attempts. Exiting.`,
         );
         process.exit(1);
       }

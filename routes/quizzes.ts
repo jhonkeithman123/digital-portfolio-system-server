@@ -1,10 +1,10 @@
 import express, { type Response } from "express";
-import { verifyToken, type AuthRequest } from "../middleware/auth.js";
-import { queryAsync } from "../config/helpers/dbHelper.js";
-import wrapAsync from "../utils/wrapAsync.js";
-import db from "../config/db.js";
+import { verifyToken, type AuthRequest } from "middleware/auth.js";
+import { queryAsync } from "config/helpers/dbHelper.js";
+import wrapAsync from "utils/wrapAsync.js";
+import db from "config/db.js";
 import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
-import createNotification from "../config/createNotification.js";
+import createNotification from "config/createNotification.js";
 
 const router = express.Router();
 
@@ -144,7 +144,7 @@ const parseQuestions = (raw: unknown): unknown => {
 async function loadPages(quizId: number): Promise<PageData[]> {
   const rows = await queryAsync<QuizPageRow>(
     "SELECT id, page_index, title, content_json FROM quiz_pages WHERE quiz_id = ? ORDER BY page_index ASC",
-    [quizId]
+    [quizId],
   );
 
   return rows.map((r) => {
@@ -155,8 +155,8 @@ async function loadPages(quizId: number): Promise<PageData[]> {
       questions = Array.isArray(parsed)
         ? parsed
         : Array.isArray((parsed as any)?.questions)
-        ? (parsed as any).questions
-        : [];
+          ? (parsed as any).questions
+          : [];
     } catch (error) {
       console.error("Error parsing content_json for page:", error);
       // Continue with empty questions array
@@ -216,7 +216,7 @@ async function writePages(quizId: number, pages: PageData[]): Promise<void> {
 
     await queryAsync(
       "INSERT INTO quiz_pages (quiz_id, page_index, title, content_json) VALUES (?, ?, ?, ?)",
-      [quizId, i, title, payload]
+      [quizId, i, title, payload],
     );
   }
 }
@@ -408,10 +408,10 @@ const sanitizeQuestion = (q: any, pIdx: number, qIdx: number): QuestionData => {
         ? q.correctAnswer
             .map((v: any) => asInt(v, -1))
             .filter((n: number) => n >= 0 && n < options.length)
-        : []
+        : [],
     );
     const correctAnswer = Array.from(set.values()).sort(
-      (a, b) => Number(a) - Number(b)
+      (a, b) => Number(a) - Number(b),
     );
 
     return {
@@ -475,7 +475,7 @@ const normalizeToPages = (qs: unknown): PageData[] => {
       title: String(pg?.title ?? `Page ${pIdx + 1}`),
       questions: Array.isArray(pg?.questions)
         ? pg.questions.map((q: any, qIdx: number) =>
-            sanitizeQuestion(q, pIdx, qIdx)
+            sanitizeQuestion(q, pIdx, qIdx),
           )
         : [],
     }));
@@ -492,7 +492,7 @@ const normalizeToPages = (qs: unknown): PageData[] => {
       title: String(pg?.title ?? `Page ${pIdx + 1}`),
       questions: Array.isArray(pg?.questions)
         ? pg.questions.map((q: any, qIdx: number) =>
-            sanitizeQuestion(q, pIdx, qIdx)
+            sanitizeQuestion(q, pIdx, qIdx),
           )
         : [],
     }));
@@ -505,7 +505,7 @@ const normalizeToPages = (qs: unknown): PageData[] => {
       id: makePageId(0),
       title: "Page 1",
       questions: arr.map((q: any, qIdx: number) =>
-        sanitizeQuestion(q, 0, qIdx)
+        sanitizeQuestion(q, 0, qIdx),
       ),
     },
   ];
@@ -571,7 +571,7 @@ router.get(
          JOIN classrooms c ON q.classroom_id = c.id
          LEFT JOIN users u ON q.teacher_id = u.id
          WHERE c.code = ?`,
-        [code]
+        [code],
       );
 
       // Step 2: Count questions per quiz
@@ -580,7 +580,7 @@ router.get(
           // Fetch all pages for this quiz
           const pages = await queryAsync<QuizPageRow>(
             "SELECT content_json FROM quiz_pages WHERE quiz_id = ?",
-            [r.id]
+            [r.id],
           );
 
           let questions_count = 0;
@@ -590,8 +590,8 @@ router.get(
               const qArray = Array.isArray(parsed)
                 ? parsed
                 : Array.isArray((parsed as any)?.questions)
-                ? (parsed as any).questions
-                : [];
+                  ? (parsed as any).questions
+                  : [];
               questions_count += qArray.length;
             } catch (e) {
               // Continue on parse error
@@ -611,7 +611,7 @@ router.get(
       console.error("Error listing quizzes:", error.message);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -699,7 +699,7 @@ router.post(
       // Step 3: Verify classroom ownership
       const classroomRows = await queryAsync<RowDataPacket>(
         "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
-        [code, teacherId]
+        [code, teacherId],
       );
 
       if (!classroomRows.length) {
@@ -725,7 +725,7 @@ router.post(
           startTime || null,
           endTime || null,
           tls,
-        ]
+        ],
       );
 
       const quizId = result.insertId;
@@ -740,7 +740,7 @@ router.post(
       console.error("Error creating quiz:", error.message);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -778,7 +778,7 @@ router
            FROM quizzes q
            JOIN classrooms c ON q.classroom_id = c.id
            WHERE c.code = ? AND q.id = ? LIMIT 1`,
-          [code, quizId]
+          [code, quizId],
         );
 
         if (!rows.length) {
@@ -800,7 +800,7 @@ router
         // Step 4: Count attempts used
         const arows = await queryAsync<RowDataPacket>(
           "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
-          [quizId, userId]
+          [quizId, userId],
         );
         const attempts_used = arows[0]?.cnt || 0;
         const attempts_remaining =
@@ -829,7 +829,7 @@ router
         console.error("Error fetching quiz:", error.message);
         res.status(500).json({ success: false, message: "Server error" });
       }
-    })
+    }),
   )
   // ==== PUT /:code/quizzes/:quizId - Update quiz ====
   /**
@@ -903,7 +903,7 @@ router
            FROM quizzes q
            JOIN classrooms c ON q.classroom_id = c.id
            WHERE q.id = ? AND c.code = ? LIMIT 1`,
-          [quizId, code]
+          [quizId, code],
         );
 
         if (!rows.length) {
@@ -935,7 +935,7 @@ router
             quizId,
             rows[0].classroom_id,
             teacherId,
-          ]
+          ],
         );
 
         // Step 5: Replace pages
@@ -948,7 +948,7 @@ router
         console.error("Error updating quiz:", error.message);
         res.status(500).json({ success: false, message: "Server error" });
       }
-    })
+    }),
   )
   // ==== DELETE /:code/quizzes/:quizId - Delete quiz ====
   /**
@@ -1010,7 +1010,7 @@ router
            FROM quizzes q
            JOIN classrooms c ON q.classroom_id = c.id
            WHERE q.id = ? AND c.code = ? LIMIT 1`,
-          [quizId, code]
+          [quizId, code],
         );
 
         if (!rows.length) {
@@ -1039,7 +1039,7 @@ router
         console.error("Error deleting quiz:", error.message);
         res.status(500).json({ success: false, message: "Server error" });
       }
-    })
+    }),
   );
 
 // ============================================================================
@@ -1117,7 +1117,7 @@ router
            FROM quizzes q
            JOIN classrooms c ON q.classroom_id = c.id
            WHERE c.code = ? AND q.id = ? LIMIT 1`,
-          [code, quizId]
+          [code, quizId],
         );
 
         if (!qrows.length) {
@@ -1194,7 +1194,7 @@ router
         console.error("Error listing attempts:", error.message);
         res.status(500).json({ success: false, message: "Server error" });
       }
-    })
+    }),
   )
   // ==== POST /:code/quizzes/:quizId/attempts - Start a new attempt ====
   /**
@@ -1258,7 +1258,7 @@ router
            FROM quizzes q
            JOIN classrooms c ON q.classroom_id = c.id
            WHERE c.code = ? AND q.id = ? LIMIT 1`,
-          [code, quizId]
+          [code, quizId],
         );
 
         if (!rows.length) {
@@ -1272,7 +1272,7 @@ router
         // Step 2: Count existing attempts
         const arows = await queryAsync<RowDataPacket>(
           "SELECT COUNT(*) as cnt FROM quiz_attempts WHERE quiz_id = ? AND student_id = ?",
-          [quizId, studentId]
+          [quizId, studentId],
         );
         const used = arows[0]?.cnt || 0;
 
@@ -1290,7 +1290,7 @@ router
 
         if (quiz.time_limit_seconds) {
           expiresAt = new Date(
-            startedAt.getTime() + quiz.time_limit_seconds * 1000
+            startedAt.getTime() + quiz.time_limit_seconds * 1000,
           );
         }
 
@@ -1306,7 +1306,7 @@ router
             JSON.stringify({}),
             startedAt,
             expiresAt,
-          ]
+          ],
         );
 
         // Step 6: Return attempt info
@@ -1321,7 +1321,7 @@ router
         console.error("Error starting attempt:", error.message);
         res.status(500).json({ success: false, message: "Server error" });
       }
-    })
+    }),
   );
 
 // ============================================================================
@@ -1396,7 +1396,7 @@ router.post(
       // Step 1: Validate attempt ownership
       const art = await queryAsync<QuizAttemptRow>(
         "SELECT * FROM quiz_attempts WHERE id = ? AND quiz_id = ? AND student_id = ? LIMIT 1",
-        [attemptId, quizId, studentId]
+        [attemptId, quizId, studentId],
       );
 
       if (!art.length) {
@@ -1468,8 +1468,8 @@ router.post(
       const percent = manualGradingRequired
         ? null
         : maxScore
-        ? Math.round((score / maxScore) * 100)
-        : 0;
+          ? Math.round((score / maxScore) * 100)
+          : 0;
 
       const status = manualGradingRequired ? "needs_grading" : "completed";
 
@@ -1483,7 +1483,7 @@ router.post(
           JSON.stringify(grading),
           new Date(),
           attemptId,
-        ]
+        ],
       );
 
       // Send notification if auto-graded
@@ -1523,7 +1523,7 @@ router.post(
       console.error("Error submitting attempt:", error.message);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -1602,7 +1602,7 @@ router.patch(
          FROM quizzes q
          JOIN classrooms c ON q.classroom_id = c.id
          WHERE c.code = ? AND q.id = ? LIMIT 1`,
-        [code, quizId]
+        [code, quizId],
       );
 
       if (!qrows.length) {
@@ -1618,7 +1618,7 @@ router.patch(
       // Step 2: Verify attempt exists
       const arows = await queryAsync<QuizAttemptRow>(
         "SELECT * FROM quiz_attempts WHERE id = ? AND quiz_id = ? LIMIT 1",
-        [attemptId, quizId]
+        [attemptId, quizId],
       );
 
       if (!arows.length) {
@@ -1640,20 +1640,20 @@ router.patch(
           now,
           String(comment || ""),
           attemptId,
-        ]
+        ],
       );
 
       // Get attempt student_id
       const [att] = await queryAsync<QuizAttemptRow & { student_id: number }>(
         "SELECT id, student_id FROM quiz_attempts WHERE id = ? LIMIT 1",
-        [attemptId]
+        [attemptId],
       );
 
       try {
         // Send notification
         const [quizRow] = await queryAsync<QuizRow & { title: string }>(
           "SELECT title FROM quizzes WHERE id = ? LIMIT 1",
-          [quizId]
+          [quizId],
         );
         if (att && quizRow) {
           await createNotification({
@@ -1676,7 +1676,7 @@ router.patch(
       console.error("Error grading attempt:", error.message);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 router.get(
@@ -1699,7 +1699,7 @@ router.get(
          JOIN classrooms c ON c.id = q.classroom_id
          WHERE c.code = ? AND qa.quiz_id = ? AND qa.student_id = ?
          ORDER BY qa.attempt_no DESC`,
-        [code, quizId, studentId]
+        [code, quizId, studentId],
       );
 
       // Parse JSON fields
@@ -1736,7 +1736,7 @@ router.get(
       console.error("Error fetching student attempts:", error.message);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 export default router;

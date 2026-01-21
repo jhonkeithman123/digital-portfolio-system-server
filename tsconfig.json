@@ -11,7 +11,32 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": false,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+
+    /* Path aliasing */
+    "baseUrl": "./",
+    "paths": {
+      /* Root */
+      "@/*": ["*"],
+
+      /* Subfolders of root */
+      "types/*": ["types/*"],
+      "routes/*": ["routes/*"],
+      "middleware/*": ["middleware/*"],
+      "utils/*": ["utils/*"],
+
+      /* uploads path aliasing */
+      "uploads/*": ["uploads/*"],
+
+      /* Subfolders of uploads */
+      "activity/*": ["activities/*"],
+
+      /* Config path alias */
+      "config/*": ["config/*"],
+
+      /* Subfolders of config */
+      "helpers/*": ["config/helpers/*"]
+    }
   },
   "include": ["./*.ts", "./routes/*.ts", "types/*.ts"]
 }

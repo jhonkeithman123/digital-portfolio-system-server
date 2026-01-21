@@ -1,18 +1,18 @@
 import express, { type Request, type Response } from "express";
 import path from "path";
 import multer, { type FileFilterCallback } from "multer";
-import wrapAsync from "../utils/wrapAsync";
-import db from "../config/db";
-import { verifyToken, type AuthRequest } from "../middleware/auth";
-import { queryAsync } from "../config/helpers/dbHelper";
+import wrapAsync from "utils/wrapAsync";
+import db from "config/db";
+import { verifyToken, type AuthRequest } from "middleware/auth";
+import { queryAsync } from "helpers/dbHelper";
 import type {
   ActivityRow,
   CommentRow,
   CommentReplyRow,
   InstructionEntry,
   ActivitySubmission,
-} from "../types/db";
-import createNotification from "../config/createNotification";
+} from "types/db";
+import createNotification from "config/createNotification";
 import type { RowDataPacket } from "mysql2";
 import fs from "fs/promises";
 
@@ -41,7 +41,7 @@ const upload = multer({
   fileFilter: (
     _req: Request,
     file: Express.Multer.File,
-    cb: FileFilterCallback
+    cb: FileFilterCallback,
   ) => {
     const allowed = [
       "application/pdf",
@@ -123,11 +123,11 @@ interface SubmissionWithUser extends ActivitySubmission {
  */
 async function getClassroomForTeacher(
   code: string,
-  teacherId: number
+  teacherId: number,
 ): Promise<ClassroomIdRow | null> {
   const rows = await queryAsync<ClassroomIdRow>(
     "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
-    [code, teacherId]
+    [code, teacherId],
   );
   return rows[0] || null;
 }
@@ -147,7 +147,7 @@ async function getClassroomForTeacher(
 async function authorizeActivity(
   activityId: string | number,
   userId: number,
-  role: string
+  role: string,
 ): Promise<AuthResult> {
   // Step 1: Fetch the activity to get classroom and teacher info
   const rows = await queryAsync<ActivityRow>(
@@ -155,7 +155,7 @@ async function authorizeActivity(
      FROM activities
      WHERE id = ?
      LIMIT 1`,
-    [activityId]
+    [activityId],
   );
 
   if (!rows.length) return { ok: false, reason: "Activity not found" };
@@ -173,7 +173,7 @@ async function authorizeActivity(
        FROM classroom_members
        WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
        LIMIT 1`,
-      [activity.classroom_id, userId]
+      [activity.classroom_id, userId],
     );
 
     if (!member.length) return { ok: false, reason: "Forbidden" };
@@ -239,7 +239,7 @@ router
       JOIN classrooms c ON c.id = a.classroom_id
       WHERE a.id = ?
       LIMIT 1`,
-        [id]
+        [id],
       );
 
       if (!rows.length) {
@@ -262,7 +262,7 @@ router
          FROM classroom_members
          WHERE classroom_id = ? AND student_id = ? AND status = 'accepted'
          LIMIT 1`,
-          [activity.classroom_id, userId]
+          [activity.classroom_id, userId],
         );
 
         if (!memberRows.length) {
@@ -285,7 +285,7 @@ router
        JOIN users u ON u.ID = ai.teacher_id
        WHERE ai.activity_id = ?
        ORDER BY ai.created_at ASC`,
-        [id]
+        [id],
       );
 
       // Step 4: Return activity data
@@ -293,7 +293,7 @@ router
         success: true,
         activity: { ...activity, instructions },
       });
-    })
+    }),
   )
   .delete(
     wrapAsync(async (req: AuthRequest, res: Response) => {
@@ -313,7 +313,7 @@ router
 
       const rows = await queryAsync<ActivityRow>(
         `SELECT id, teacher_id FROM activities WHERE id = ? LIMIT 1`,
-        [id]
+        [id],
       );
       if (!rows.length) {
         return res
@@ -327,7 +327,7 @@ router
 
       await db.query(`DELETE FROM activities WHERE id = ?`, [id]);
       return res.json({ success: true, message: "Activity deleted" });
-    })
+    }),
   );
 
 // ============================================================================
@@ -389,7 +389,7 @@ router
          JOIN users u ON u.ID = c.user_id
          WHERE c.activity_id = ? AND c.classroom_id = ?
          ORDER BY c.created_at ASC`,
-        [id, auth.activity!.classroom_id]
+        [id, auth.activity!.classroom_id],
       );
 
       // Step 3: Fetch all replies for these comments (if any)
@@ -412,7 +412,7 @@ router
            JOIN users u ON u.ID = r.user_id
            WHERE r.comment_id IN (${placeholder})
            ORDER BY r.created_at ASC`,
-          ids // DBParams allows arrays for IN clauses
+          ids, // DBParams allows arrays for IN clauses
         );
 
         // Step 4: Group replies by their parent comment ID
@@ -428,7 +428,7 @@ router
       }));
 
       return res.json({ success: true, comments: payload });
-    })
+    }),
   )
   // ============================================================================
   // ROUTE: POST /:id/comments - Add a new comment to an activity
@@ -486,7 +486,7 @@ router
         `INSERT INTO comments
             (classroom_id, activity_id, user_id, comment, created_at, updated_at)
          VALUES (?, ?, ?, ?, NOW(), NOW())`,
-        [auth.activity!.classroom_id, id, userId, safe]
+        [auth.activity!.classroom_id, id, userId, safe],
       );
 
       if (!result || typeof result !== "object" || !("insertId" in result)) {
@@ -513,7 +513,7 @@ router
        JOIN users u ON u.ID = c.user_id
        WHERE c.id = ?
        LIMIT 1`,
-        [commentId]
+        [commentId],
       );
 
       // Step 5: Return the comment with empty replies array
@@ -522,7 +522,7 @@ router
         comments: { ...inserted[0], replies: [] },
         message: "Comment added",
       });
-    })
+    }),
   );
 
 router.delete(
@@ -555,7 +555,7 @@ router.delete(
     // Try to delete as a top-level comment
     const commentRows = await queryAsync<CommentIdUser>(
       `SELECT id, user_id FROM comments WHERE id = ? AND activity_id = ? LIMIT 1`,
-      [commentId, id]
+      [commentId, id],
     );
 
     if (commentRows.length) {
@@ -579,7 +579,7 @@ router.delete(
        FROM comment_replies r
        JOIN comments c ON c.id = r.comment_id
        WHERE r.id = ? AND c.activity_id = ? LIMIT 1`,
-      [commentId, id]
+      [commentId, id],
     );
 
     if (replyRows.length) {
@@ -593,7 +593,7 @@ router.delete(
       // Delete the reply
       await db.query<RowDataPacket[]>(
         `DELETE FROM comment_replies WHERE id = ?`,
-        [commentId]
+        [commentId],
       );
 
       return res.json({ success: true, message: "Reply deleted" });
@@ -603,7 +603,7 @@ router.delete(
     return res
       .status(404)
       .json({ success: false, error: "Comment or reply not found" });
-  })
+  }),
 );
 
 // ============================================================================
@@ -660,7 +660,7 @@ router.post(
     // Step 3: Verify parent comment exists and belongs to this activity
     const parent = await queryAsync<RowDataPacket>(
       `SELECT id FROM comments WHERE id = ? AND activity_id = ? LIMIT 1`,
-      [commentId, id]
+      [commentId, id],
     );
     if (!parent.length) {
       return res
@@ -676,7 +676,7 @@ router.post(
       `INSERT INTO comment_replies
         (comment_id, user_id, reply, created_at, updated_at)
        VALUES (?, ?, ?, NOW(), NOW())`,
-      [commentId, userId, safe]
+      [commentId, userId, safe],
     );
 
     if (!result || typeof result !== "object" || !("insertId" in result)) {
@@ -702,7 +702,7 @@ router.post(
        JOIN users u ON u.ID = r.user_id
        WHERE r.id = ?
        LIMIT 1`,
-      [replyId]
+      [replyId],
     );
 
     if (!inserted.length) {
@@ -717,7 +717,7 @@ router.post(
       reply: inserted[0],
       message: "Reply added",
     });
-  })
+  }),
 );
 
 router.delete(
@@ -746,7 +746,7 @@ router.delete(
        JOIN comments c ON c.id = r.comment_id
        WHERE r.id = ? AND r.comment_id = ? AND c.activity_id = ? AND c.id = ?
        LIMIT 1`,
-      [replyId, commentId, id, commentId]
+      [replyId, commentId, id, commentId],
     );
 
     if (!replyRows.length) {
@@ -760,11 +760,11 @@ router.delete(
 
     await db.query<RowDataPacket[]>(
       `DELETE FROM comment_replies WHERE id = ?`,
-      [replyId]
+      [replyId],
     );
 
     return res.json({ success: true, message: "Reply deleted" });
-  })
+  }),
 );
 
 // ============================================================================
@@ -809,7 +809,7 @@ router.post(
       // Step 3: Verify teacher owns the classroom
       const classroom = await getClassroomForTeacher(
         classroomCode,
-        req.user!.userId
+        req.user!.userId,
       );
       if (!classroom)
         return res
@@ -834,7 +834,7 @@ router.post(
           file ? file.originalname : null, // Original filename for display
           file ? file.mimetype : null, // MIME type for proper handling
           maxScoreValue,
-        ]
+        ],
       );
 
       const activityId = (result as any).insertId;
@@ -845,7 +845,7 @@ router.post(
           `INSERT INTO activity_instructions
             (activity_id, teacher_id, instruction_text, created_at, updated_at)
            VALUES (?, ?, ?, NOW(), NOW())`,
-          [activityId, req.user!.userId, trimmedInstructions.slice(0, 2000)]
+          [activityId, req.user!.userId, trimmedInstructions.slice(0, 2000)],
         );
       }
 
@@ -861,7 +861,7 @@ router.post(
         .status(500)
         .json({ success: false, error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -902,7 +902,7 @@ router.get(
       // Teachers must own the classroom
       const rows = await queryAsync<ClassroomIdRow>(
         "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
-        [code, userId]
+        [code, userId],
       );
       classroomRow = rows[0];
     } else {
@@ -913,7 +913,7 @@ router.get(
        JOIN classroom_members cm ON cm.classroom_id = c.id
        WHERE c.code = ? AND cm.student_id = ? AND cm.status = 'accepted'
        LIMIT 1`,
-        [code, userId]
+        [code, userId],
       );
       classroomRow = rows[0];
     }
@@ -931,12 +931,12 @@ router.get(
      FROM activities
      WHERE classroom_id = ?
      ORDER BY created_at DESC`,
-      [classroomRow.id]
+      [classroomRow.id],
     );
 
     // Step 4: Return activities list
     return res.json({ success: true, activities });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1003,7 +1003,7 @@ router.post(
       `SELECT id FROM activity_submissions 
        WHERE activity_id = ? AND student_id = ? 
        LIMIT 1`,
-      [id, userId]
+      [id, userId],
     );
 
     let submissionId: number;
@@ -1024,7 +1024,7 @@ router.post(
           file ? file.originalname : null,
           file ? file.mimetype : null,
           submissionId,
-        ]
+        ],
       );
     } else {
       // Insert new submission
@@ -1038,7 +1038,7 @@ router.post(
           file ? file.filename : null,
           file ? file.originalname : null,
           file ? file.mimetype : null,
-        ]
+        ],
       );
 
       if (!result || !("insertId" in result)) {
@@ -1077,7 +1077,7 @@ router.post(
        JOIN users u ON u.ID = s.student_id
        WHERE s.id = ?
        LIMIT 1`,
-      [submissionId]
+      [submissionId],
     );
 
     // Step 6: Return success
@@ -1086,7 +1086,7 @@ router.post(
       message: existing.length ? "Submission updated" : "Submission created",
       submission: submission[0],
     });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1136,7 +1136,7 @@ router.patch(
      FROM activities
      WHERE id = ?
      LIMIT 1`,
-      [id]
+      [id],
     );
 
     if (!actRows.length) {
@@ -1173,7 +1173,7 @@ router.patch(
       `INSERT INTO activity_instructions
         (activity_id, teacher_id, instruction_text, created_at)
        VALUES (?, ?, ?, NOW())`,
-      [id, userId, safe]
+      [id, userId, safe],
     );
 
     if (!result || !("insertId" in result)) {
@@ -1197,7 +1197,7 @@ router.patch(
        JOIN users u ON u.ID = ai.teacher_id
        WHERE ai.activity_id = ?
        ORDER BY ai.created_at ASC`,
-      [id]
+      [id],
     );
 
     // Step 7: Return all instructions with attribution
@@ -1206,7 +1206,7 @@ router.patch(
       message: "Instruction added",
       instructions: allInstructions,
     });
-  })
+  }),
 );
 
 router.put(
@@ -1247,7 +1247,7 @@ router.put(
     // Verify activity ownership
     const actRows = await queryAsync<ActivityRow>(
       `SELECT id, teacher_id FROM activities WHERE id = ? LIMIT 1`,
-      [id]
+      [id],
     );
     if (!actRows.length) {
       return res
@@ -1261,7 +1261,7 @@ router.put(
     // Verify instruction belongs to this activity
     const instrRows = await queryAsync<InstructionEntry>(
       `SELECT id FROM activity_instructions WHERE id = ? AND activity_id = ? LIMIT 1`,
-      [instructionId, id]
+      [instructionId, id],
     );
     if (!instrRows.length) {
       return res
@@ -1272,7 +1272,7 @@ router.put(
     // Update instruction
     await db.query<RowDataPacket[]>(
       `UPDATE activity_instructions SET instruction_text = ?, updated_at = NOW() WHERE id = ?`,
-      [safe, instructionId]
+      [safe, instructionId],
     );
 
     // Return full instruction list (oldest first)
@@ -1289,7 +1289,7 @@ router.put(
        JOIN users u ON u.ID = ai.teacher_id
        WHERE ai.activity_id = ?
        ORDER BY ai.created_at ASC`,
-      [id]
+      [id],
     );
 
     return res.json({
@@ -1297,7 +1297,7 @@ router.put(
       message: "Instruction updated",
       instructions: allInstructions,
     });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1374,7 +1374,7 @@ router.patch(
     // Step 3: Try to update as a top-level comment
     const commentRows = await queryAsync<CommentIdUser>(
       `SELECT id, user_id FROM comments WHERE id = ? AND activity_id = ? LIMIT 1`,
-      [commentId, id]
+      [commentId, id],
     );
 
     if (commentRows.length) {
@@ -1388,7 +1388,7 @@ router.patch(
       // Update comment and set edited flag
       await db.query<RowDataPacket[]>(
         `UPDATE comments SET comment = ?, updated_at = NOW(), edited = 1 WHERE id = ?`,
-        [safe, commentId]
+        [safe, commentId],
       );
 
       // Fetch updated comment with user details
@@ -1398,7 +1398,7 @@ router.patch(
         FROM comments c
         JOIN users u ON u.ID = c.user_id
         WHERE c.id = ? LIMIT 1`,
-        [commentId]
+        [commentId],
       );
 
       return res.json({
@@ -1416,7 +1416,7 @@ router.patch(
        FROM comment_replies r
        JOIN comments c ON c.id = r.comment_id
        WHERE r.id = ? AND c.activity_id = ? LIMIT 1`,
-      [commentId, id]
+      [commentId, id],
     );
 
     if (replyRows.length) {
@@ -1430,7 +1430,7 @@ router.patch(
       // Update reply and set edited flag
       await db.query<RowDataPacket[]>(
         `UPDATE comment_replies SET reply = ?, updated_at = NOW(), edited = 1 WHERE id = ?`,
-        [safe, commentId]
+        [safe, commentId],
       );
 
       // Fetch updated reply with user details
@@ -1440,7 +1440,7 @@ router.patch(
          FROM comment_replies r
          JOIN users u ON u.ID = r.user_id
          WHERE r.id = ? LIMIT 1`,
-        [commentId]
+        [commentId],
       );
 
       return res.json({
@@ -1455,7 +1455,7 @@ router.patch(
     return res
       .status(404)
       .json({ success: false, error: "Comment or reply not found" });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1495,7 +1495,7 @@ router.get(
        FROM activity_submissions 
        WHERE activity_id = ? AND student_id = ? 
        LIMIT 1`,
-      [id, userId]
+      [id, userId],
     );
 
     console.log("Submission found:", submission.length > 0);
@@ -1505,7 +1505,7 @@ router.get(
     }
 
     return res.json({ success: true, submission: submission[0] });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1561,19 +1561,19 @@ router.get(
        JOIN users u ON u.ID = s.student_id
        WHERE s.activity_id = ?
        ORDER BY s.created_at DESC`,
-      [id]
+      [id],
     );
 
     // Get activity max_score
     const activityRows = await queryAsync<ActivityRow>(
       `SELECT max_score FROM activities WHERE id = ? LIMIT 1`,
-      [id]
+      [id],
     );
 
     const maxScore = activityRows[0]?.max_score || 100;
 
     return res.json({ success: true, submissions, maxScore });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1612,7 +1612,7 @@ router.delete(
        FROM activity_submissions 
        WHERE id = ? AND activity_id = ? 
        LIMIT 1`,
-      [submissionId, id]
+      [submissionId, id],
     );
 
     if (!existing.length) {
@@ -1632,7 +1632,7 @@ router.delete(
         "..",
         "uploads",
         "activities",
-        existing[0].file_path
+        existing[0].file_path,
       );
       try {
         await fs.unlink(filePath);
@@ -1644,11 +1644,11 @@ router.delete(
     // Delete submission
     await db.query<RowDataPacket[]>(
       `DELETE FROM activity_submissions WHERE id = ?`,
-      [submissionId]
+      [submissionId],
     );
 
     return res.json({ success: true, message: "Submission removed" });
-  })
+  }),
 );
 
 // ============================================================================
@@ -1695,7 +1695,7 @@ router.patch(
     // Get activity max_score
     const activityRows = await queryAsync<ActivityRow & { max_score: number }>(
       `SELECT id, max_score FROM activities WHERE id = ? LIMIT 1`,
-      [id]
+      [id],
     );
 
     if (!activityRows.length) {
@@ -1721,7 +1721,7 @@ router.patch(
        FROM activity_submissions s
        WHERE s.id = ? AND s.activity_id = ?
        LIMIT 1`,
-      [submissionId, id]
+      [submissionId, id],
     );
 
     if (!subRows.length) {
@@ -1735,7 +1735,7 @@ router.patch(
       `UPDATE activity_submissions 
        SET score = ?, graded_at = NOW(), graded_by = ?
        WHERE id = ?`,
-      [parsedScore, userId, submissionId]
+      [parsedScore, userId, submissionId],
     );
 
     // Fetch updated submission
@@ -1764,7 +1764,7 @@ router.patch(
        JOIN users u ON u.ID = s.student_id
        WHERE s.id = ?
        LIMIT 1`,
-      [submissionId]
+      [submissionId],
     );
 
     try {
@@ -1787,6 +1787,6 @@ router.patch(
       submission: updated[0],
       maxScore,
     });
-  })
+  }),
 );
 export default router;

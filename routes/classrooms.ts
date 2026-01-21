@@ -1,11 +1,11 @@
 import express, { type Response } from "express";
 import dotenv from "dotenv";
 
-import { verifyToken, type AuthRequest } from "../middleware/auth";
-import { queryAsync } from "../config/helpers/dbHelper";
-import generateCode from "../config/code_generator";
-import wrapAsync from "../utils/wrapAsync";
-import db from "../config/db";
+import { verifyToken, type AuthRequest } from "middleware/auth";
+import { queryAsync } from "config/helpers/dbHelper";
+import generateCode from "config/code_generator";
+import wrapAsync from "utils/wrapAsync";
+import db from "config/db";
 import type { RowDataPacket, ResultSetHeader } from "mysql2/promise";
 
 dotenv.config();
@@ -140,7 +140,7 @@ router.get(
       console.error("Error checking students in the database:", err.message);
       return res.status(500).json({ error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -177,7 +177,7 @@ router.get(
       // Step 1: Find teacher's classroom (should be 0 or 1 row)
       const result = await queryAsync<TeacherClassroomRow>(
         "SELECT id, code, name, section FROM classrooms WHERE teacher_id = ?",
-        [teacherId]
+        [teacherId],
       );
 
       // Step 2: Log for debugging (only in development to reduce noise)
@@ -200,7 +200,7 @@ router.get(
       console.error("Error checking teacher status:", error.message);
       return res.status(500).json({ error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -266,7 +266,7 @@ router.post(
       console.error("Error creating classroom:", err);
       res.status(500).json({ success: false, error: "Database error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -319,7 +319,7 @@ router.patch(
       // Step 2: Verify teacher owns this classroom
       const rows = await queryAsync<RowDataPacket>(
         "SELECT id FROM classrooms WHERE code = ? AND teacher_id = ? LIMIT 1",
-        [code, teacherId]
+        [code, teacherId],
       );
 
       if (!rows.length) {
@@ -344,7 +344,7 @@ router.patch(
       // Step 5: Update classroom section
       await db.query<ResultSetHeader>(
         "UPDATE classrooms SET section = ? WHERE code = ? AND teacher_id = ?",
-        [section, code, teacherId]
+        [section, code, teacherId],
       );
 
       // Step 6: Return success message
@@ -361,7 +361,7 @@ router.patch(
         .status(500)
         .json({ success: false, error: "Internal server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -437,7 +437,7 @@ router.get(
       console.error("Error fetching students:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -489,7 +489,7 @@ router.post(
       // Step 1: Find classroom by code
       const classrooms = await queryAsync<ClassroomRow>(
         "SELECT id, name FROM classrooms WHERE code = ? LIMIT 1",
-        [code]
+        [code],
       );
 
       if (!classrooms.length) {
@@ -503,12 +503,12 @@ router.post(
       // Step 2: Check if student is already invited or member
       const existing = await queryAsync<RowDataPacket>(
         "SELECT 1 FROM classroom_members WHERE classroom_id = ? AND student_id = ? LIMIT 1",
-        [classroomId, studentId]
+        [classroomId, studentId],
       );
 
       if (existing.length > 0) {
         console.log(
-          `Detected existing student ${studentId} in classroom ${classroomId}`
+          `Detected existing student ${studentId} in classroom ${classroomId}`,
         );
         return res
           .status(409)
@@ -518,7 +518,7 @@ router.post(
       // Step 3: Insert pending membership
       await db.query<ResultSetHeader>(
         "INSERT INTO classroom_members (classroom_id, name, student_id, status, code) VALUES (?, ?, ?, 'pending', ?)",
-        [classroomId, classroomName, studentId, code]
+        [classroomId, classroomName, studentId, code],
       );
 
       // Step 4: Create notification (fire-and-forget)
@@ -528,7 +528,7 @@ router.post(
       queryAsync(
         `INSERT INTO notifications (recipient_id, sender_id, type, message, link)
          VALUES (?, ?, 'invite', ?, ?)`,
-        [studentId, req.user!.userId, message, link]
+        [studentId, req.user!.userId, message, link],
       ).catch((e) => console.error("Failed to create notification:", e));
 
       // Step 5: Return success
@@ -539,7 +539,7 @@ router.post(
       console.error("Error inviting student:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -614,7 +614,7 @@ router.get(
       console.error("Error fetching invites:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -654,7 +654,7 @@ router.post(
       // Step 1: Insert hide record (duplicate-safe)
       await db.query<ResultSetHeader>(
         "INSERT INTO hidden_invites (student_id, invite_id) VALUES (?, ?)",
-        [studentId, inviteId]
+        [studentId, inviteId],
       );
 
       // Step 2: Return success
@@ -663,7 +663,7 @@ router.post(
       console.error("Error hiding invite:", err);
       res.status(500).json({ success: false, error: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -712,7 +712,7 @@ router.post(
       // Step 1: Update membership status to 'accepted'
       const [result] = await db.query<ResultSetHeader>(
         "UPDATE classroom_members SET status = 'accepted' WHERE id = ? AND student_id = ?",
-        [inviteId, studentId]
+        [inviteId, studentId],
       );
 
       // Step 2: Check if update succeeded (invite exists and belongs to student)
@@ -727,7 +727,7 @@ router.post(
       // Step 3: Clean up hidden_invites (non-blocking, fire-and-forget)
       queryAsync(
         "DELETE FROM hidden_invites WHERE invite_id = ? AND student_id = ?",
-        [inviteId, studentId]
+        [inviteId, studentId],
       ).catch((e) => console.error("Error cleaning up hidden invites:", e));
 
       // Step 4: Return success
@@ -736,7 +736,7 @@ router.post(
       console.error("Error accepting invite:", err);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -803,7 +803,7 @@ router.post(
       // Step 1: Find classroom by code
       const classroomRows = await queryAsync<ClassroomRow>(
         "SELECT id, name FROM classrooms WHERE code = ? LIMIT 1",
-        [code]
+        [code],
       );
 
       if (!classroomRows.length) {
@@ -817,14 +817,14 @@ router.post(
       // Step 2: Get student's username for classroom_members.name
       const userRows = await queryAsync<UserRow>(
         "SELECT username FROM users WHERE id = ? LIMIT 1",
-        [studentId]
+        [studentId],
       );
       const studentName = userRows[0]?.username || "";
 
       // Step 3: Check if student already has a membership row
       const memberRows = await queryAsync<ClassroomMemberRow>(
         "SELECT id, status FROM classroom_members WHERE classroom_id = ? AND student_id = ? LIMIT 1",
-        [classroomId, studentId]
+        [classroomId, studentId],
       );
 
       // Scenario A: Already accepted member
@@ -839,35 +839,35 @@ router.post(
       if (memberRows.length) {
         await db.query<ResultSetHeader>(
           "UPDATE classroom_members SET status = 'accepted' WHERE id = ? AND student_id = ?",
-          [memberRows[0].id, studentId]
+          [memberRows[0].id, studentId],
         );
 
         // Clean up hidden_invites (non-blocking)
         queryAsync(
           "DELETE FROM hidden_invites WHERE invite_id = ? AND student_id = ?",
-          [memberRows[0].id, studentId]
+          [memberRows[0].id, studentId],
         ).catch((e) => console.error("Error cleaning hidden invites:", e));
       } else {
         // Scenario C: New member - insert accepted membership
         try {
           await db.query<ResultSetHeader>(
             "INSERT INTO classroom_members (classroom_id, name, student_id, status, code) VALUES (?, ?, ?, 'accepted', ?)",
-            [classroomId, studentName, studentId, code]
+            [classroomId, studentName, studentId, code],
           );
 
           // Clean up any stale hidden_invites (edge case)
           const existing = await queryAsync<RowDataPacket>(
             "SELECT id FROM classroom_members WHERE classroom_id = ? AND student_id = ?",
-            [classroomId, studentId]
+            [classroomId, studentId],
           );
 
           if (existing.length) {
             const inviteId = existing[0].id;
             queryAsync(
               "DELETE FROM hidden_invites WHERE invite_id = ? AND student_id = ?",
-              [inviteId, studentId]
+              [inviteId, studentId],
             ).catch((e) =>
-              console.error("Error cleaning hidden invites after insert:", e)
+              console.error("Error cleaning hidden invites after insert:", e),
             );
           }
         } catch (err) {
@@ -884,19 +884,19 @@ router.post(
             try {
               const other = await queryAsync<RowDataPacket>(
                 "SELECT id FROM classroom_members WHERE classroom_id = ? AND student_id = ? LIMIT 1",
-                [classroomId, studentId]
+                [classroomId, studentId],
               );
 
               if (other.length) {
                 await db.query<ResultSetHeader>(
                   "UPDATE classroom_members SET status = 'accepted' WHERE id = ? AND student_id = ?",
-                  [other[0].id, studentId]
+                  [other[0].id, studentId],
                 );
 
                 // Clean up hidden_invites
                 queryAsync(
                   "DELETE FROM hidden_invites WHERE invite_id = ? AND student_id = ?",
-                  [other[0].id, studentId]
+                  [other[0].id, studentId],
                 ).catch(() => {});
               }
             } catch (innerErr) {
@@ -911,7 +911,7 @@ router.post(
 
       // Step 4: Return success with classroom details
       console.log(
-        `Student ${studentId} joined classroom ${classroomName} (${code})`
+        `Student ${studentId} joined classroom ${classroomName} (${code})`,
       );
 
       res.status(200).json({
@@ -925,7 +925,7 @@ router.post(
         .status(500)
         .json({ success: false, error: "Failed to join classroom" });
     }
-  })
+  }),
 );
 
 // ============================================================================
@@ -981,7 +981,7 @@ router.get(
       // Step 1: Find classroom by code
       const classroomRows = await queryAsync<ClassroomRow>(
         "SELECT id, name, code, teacher_id FROM classrooms WHERE code = ? LIMIT 1",
-        [code]
+        [code],
       );
 
       if (!classroomRows.length) {
@@ -997,7 +997,7 @@ router.get(
         `SELECT cm.id, cm.status, cm.student_id
          FROM classroom_members cm
          WHERE cm.classroom_id = ? AND cm.student_id = ? LIMIT 1`,
-        [classroom.id, userId]
+        [classroom.id, userId],
       );
 
       // Step 3: Determine membership status
@@ -1028,7 +1028,7 @@ router.get(
       console.error("Error checking membership:", e);
       return res.status(500).json({ success: false, error: "Server error" });
     }
-  })
+  }),
 );
 
 export default router;
