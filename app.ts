@@ -11,7 +11,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import auth from "routes/auth";
-import quizzes from "routes/quizzes";
 import mainRoute from "routes/default";
 import security from "routes/security";
 import classrooms from "routes/classrooms";
@@ -182,7 +181,6 @@ app.use("/", mainRoute);
 app.use("/auth", auth);
 app.use("/security", security);
 app.use("/classrooms", classrooms);
-app.use("/quizzes", quizzes);
 app.use("/activity", activities);
 app.use("/showcase", showcase);
 
