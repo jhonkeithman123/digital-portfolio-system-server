@@ -288,39 +288,57 @@ router.post(
         .json({ ok: false, error: "Database not available" });
     }
 
-    const { email, password, role: intendedRole } = req.body;
-    const normEmail = (email || "").toLowerCase(); // Normalize email to lowercase
+    const { emailOrUsername, password, role: intendedRole } = req.body;
+
+    if (!emailOrUsername || !password || !intendedRole) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
 
     try {
-      // Step 1: Find user by email
-      console.info("[AUTH] findOneUserBy start", normEmail);
-      const user = await findOneUserBy<UserRow>("email", normEmail);
-      console.info("[AUTH] findOneUserBy done", !!user);
+      // Determine if input is email (contains @) or username
+      const isEmail = emailOrUsername.includes("@");
+      const normalizedInput = isEmail
+        ? emailOrUsername.toLowerCase().trim()
+        : emailOrUsername.trim();
 
+      console.info("[AUTH] findOneUserBy start", {
+        type: isEmail ? "email" : "username",
+        normalized: normalizedInput,
+      });
+
+      // Single database query
+      const user = await findOneUserBy<UserRow>(
+        isEmail ? "email" : "username",
+        normalizedInput,
+      );
+
+      console.info("[AUTH] findOneUserBy done", { found: !!user });
+
+      // Generic error message to prevent user enumeration
       if (!user) {
         console.info("[AUTH] user not found");
-        return res.status(404).json({ error: "User not found" });
+        return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // Step 2: Verify role matches the intended portal (student vs teacher)
+      // Verify role matches the intended portal
       if (user.role !== intendedRole) {
         console.info("[AUTH] role mismatch", {
           dbRole: user.role,
           intendedRole,
         });
-        return res
-          .status(403)
-          .json({ error: `Access denied for ${intendedRole} portal` });
+        return res.status(401).json({ error: "Invalid credentials" });
       }
 
-      // Step 3: Compare password with stored bcrypt hash
+      // Compare password with stored bcrypt hash
       console.info("[AUTH] bcrypt.compare start");
       const match = await bcrypt.compare(password, user.password);
       console.info("[AUTH] bcrypt.compare done", { match });
 
-      if (!match) return res.status(401).json({ error: "Invalid password" });
+      if (!match) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
-      // Step 4: Generate JWT token with user claims
+      // Generate JWT token
       console.info("[AUTH] generateToken start");
       const { token, expiresAt } = generateToken(
         {
@@ -330,11 +348,11 @@ router.post(
           username: user.username,
           section: user.section,
         },
-        "24h", // Token valid for 8 hours
+        "24h",
       );
-      console.info("[AUTH] generateToken done", { tokenExists: !!token });
+      console.info("[AUTH] generateToken done");
 
-      // Helper: Wrap promise with timeout to prevent hanging
+      // Store session with timeout protection
       const promiseWithTimeout = <T>(
         p: Promise<T>,
         ms: number,
@@ -350,7 +368,6 @@ router.post(
           ),
         ]);
 
-      // Step 5: Store session in database (with timeout protection)
       console.info("[AUTH] createSession start");
       await promiseWithTimeout(
         createSession(user.ID, token, expiresAt),
@@ -359,13 +376,11 @@ router.post(
       );
       console.info("[AUTH] createSession done");
 
-      // Step 6: Set httpOnly cookie with token
+      // Set httpOnly cookie
       setAuthCookie(res, token);
-      console.info(
-        `[AUTH] login responding ${new Date().toISOString()} ip=${req.ip}`,
-      );
+      console.info(`[AUTH] login responding ${new Date().toISOString()}`);
 
-      // Step 7: Return user data (no password!)
+      // Return user data
       return res.json({
         success: true,
         user: {
@@ -378,7 +393,7 @@ router.post(
       });
     } catch (error) {
       const err = error as Error;
-      console.error("[AUTH] Login error:", err?.stack || err?.message || error);
+      console.error("[AUTH] Login error:", err?.stack || err?.message);
       return res.status(500).json({ error: "Internal server error" });
     }
   }),
