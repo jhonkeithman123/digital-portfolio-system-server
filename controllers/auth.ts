@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import { UserRow } from "types/db";
 import { Response } from "express";
-import { RowDataPacket } from "mysql2";
+import { RowDataPacket } from "mysql2/promise";
 import { AuthRequest } from "middleware/auth";
 import { findOneUserBy, updateRecord } from "config/helpers/dbHelper";
 import { queryAsync } from "config/helpers/dbHelper";
@@ -329,7 +329,8 @@ const signup = async (req: AuthRequest, res: Response) => {
     return res.status(503).json({ ok: false, error: "Database not available" });
   }
 
-  const { username, email, password, role, section } = req.body;
+  const { username, email, password, role, section, grade, studentNumber } =
+    req.body;
 
   console.log("[AUTH] Signup attempt", { username, email, role });
 
@@ -372,9 +373,17 @@ const signup = async (req: AuthRequest, res: Response) => {
 
     // Insert user
     const [result] = await db.query<RowDataPacket[]>(
-      `INSERT INTO users (username, email, password, role, section, is_verified) 
+      `INSERT INTO users (username, email, password, role, section, student_number, grade, is_verified) 
        VALUES (?, ?, ?, ?, ?, 0)`,
-      [username, normalizedEmail, hashedPassword, role, section || null],
+      [
+        username,
+        normalizedEmail,
+        hashedPassword,
+        role,
+        section || null,
+        studentNumber || null,
+        grade || null,
+      ],
     );
 
     const userId = (result as any).insertId;

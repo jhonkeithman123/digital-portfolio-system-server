@@ -11,7 +11,7 @@ import type {
   ActivitySubmission,
 } from "types/db";
 import createNotification from "config/createNotification";
-import type { RowDataPacket } from "mysql2";
+import type { RowDataPacket } from "mysql2/promise";
 import fs from "fs/promises";
 import multer, { type FileFilterCallback } from "multer";
 
