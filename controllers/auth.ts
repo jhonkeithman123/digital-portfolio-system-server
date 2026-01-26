@@ -374,7 +374,7 @@ const signup = async (req: AuthRequest, res: Response) => {
     // Insert user
     const [result] = await db.query<RowDataPacket[]>(
       `INSERT INTO users (username, email, password, role, section, student_number, grade, is_verified) 
-       VALUES (?, ?, ?, ?, ?, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
       [
         username,
         normalizedEmail,
