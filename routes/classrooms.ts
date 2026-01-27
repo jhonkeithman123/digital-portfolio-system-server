@@ -247,6 +247,12 @@ router.post(
   wrapAsync(controller.dismissInvite),
 );
 
+router.post(
+  "/invites/:inviteId/unhide",
+  verifyToken,
+  controller.undismissInvite,
+);
+
 // ============================================================================
 // ROUTE: POST /invites/:inviteId/accept - Accept a classroom invitation
 // ============================================================================

@@ -16,6 +16,7 @@ interface StudentClassroomRow extends RowDataPacket {
   code: string;
   name: string;
   section: string | null;
+  grade: string | null;
 }
 
 interface TeacherClassroomRow extends RowDataPacket {
@@ -23,6 +24,7 @@ interface TeacherClassroomRow extends RowDataPacket {
   code: string;
   name: string;
   section: string | null;
+  grade: string | null;
 }
 
 interface ClassroomRow extends RowDataPacket {
@@ -31,6 +33,7 @@ interface ClassroomRow extends RowDataPacket {
   code: string;
   teacher_id: number;
   section: string | null;
+  grade: string | null;
 }
 
 interface StudentRow extends RowDataPacket {
@@ -38,6 +41,8 @@ interface StudentRow extends RowDataPacket {
   name: string;
   email: string;
   role: string;
+  section: string | null;
+  grade: string | null;
 }
 
 interface InviteRow extends RowDataPacket {
@@ -59,11 +64,6 @@ interface UserRow extends RowDataPacket {
 }
 
 const checkIfStudentIsEnrolled = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const studentId = req.user!.userId;
 
   // Step 1: Query for accepted classroom membership
@@ -115,11 +115,6 @@ const checkIfStudentIsEnrolled = async (req: AuthRequest, res: Response) => {
 };
 
 const checkIfTeacherHasClassroom = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const teacherId = req.user!.userId;
 
   try {
@@ -152,12 +147,7 @@ const checkIfTeacherHasClassroom = async (req: AuthRequest, res: Response) => {
 };
 
 const createClassroom = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
-  const { name, schoolYear, section } = req.body;
+  const { name, schoolYear, section, grade } = req.body;
   const teacherId = req.user!.userId;
 
   // Step 1: Generate unique 6-character code (e.g., "ABC123")
@@ -165,8 +155,8 @@ const createClassroom = async (req: AuthRequest, res: Response) => {
 
   // Step 2: Insert classroom into database
   const sql = `
-      INSERT INTO classrooms (name, school_year, section, teacher_id, code)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO classrooms (name, school_year, section, grade, teacher_id, code)
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
 
   try {
@@ -174,6 +164,7 @@ const createClassroom = async (req: AuthRequest, res: Response) => {
       name,
       schoolYear,
       section || null, // Allow empty section
+      grade || null,
       teacherId,
       code,
     ]);
@@ -189,11 +180,6 @@ const createClassroom = async (req: AuthRequest, res: Response) => {
 };
 
 const modifySectionTeacher = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const teacherId = req.user!.userId;
   let { section, code } = req.body;
 
@@ -255,42 +241,62 @@ const modifySectionTeacher = async (req: AuthRequest, res: Response) => {
 };
 
 const fetchUnenrolledStudents = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const { code } = req.params;
   const { section } = req.query;
 
   console.log("Fetching available students for classroom:", code);
 
-  // Step 1: Build query to exclude already-invited students
-  let sql = `
-      SELECT u.id, u.username AS name, u.email, u.role
+  try {
+    // Step 1: Get classroom details including grade
+    const classroomRows = await queryAsync<ClassroomRow>(
+      "SELECT id, grade, section FROM classrooms WHERE code = ? LIMIT 1",
+      [code],
+    );
+
+    if (!classroomRows.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Classroom not found" });
+    }
+
+    const classroom = classroomRows[0];
+    const classroomGrade = classroom.grade; // e.g., "12"
+
+    // Step 2: Build query to exclude currently-enrolled students
+    // FIXED: Only check current classroom_members, not hidden_invites
+    let sql = `
+      SELECT u.id, u.username AS name, u.email, u.role, u.section, u.grade
       FROM users u
       WHERE u.role = 'student'
         AND u.id NOT IN (
           SELECT cm.student_id
           FROM classroom_members cm
-          JOIN classrooms c ON cm.classroom_id = c.id
-          WHERE c.code = ?
+          WHERE cm.classroom_id = ?
             AND (cm.status = 'accepted' OR cm.status = 'pending')
         )
     `;
 
-  const params: (string | number)[] = [code];
+    const params: (string | number)[] = [classroom.id]; // Use classroom.id instead of code
 
-  // Step 2: Optionally filter by section
-  if (section && section !== "all") {
-    sql += " AND u.section = ?";
-    params.push(section as string);
-  }
+    if (classroomGrade) {
+      sql += " AND u.grade = ?";
+      params.push(classroomGrade);
+    }
 
-  try {
-    // Step 3: Execute query and return results
+    if (section && section !== "all") {
+      const strand = (section as string).split("-")[0];
+      sql += " AND u.section LIKE ?";
+      params.push(`${strand}%`);
+    }
+
+    // Step 5: Sort by section, then username
+    sql += " ORDER BY u.section ASC, u.username ASC";
+
+    // Step 6: Execute query and return results
     const results = await queryAsync<StudentRow>(sql, params);
-    console.log(`Found ${results.length} available students`);
+    console.log(
+      `Found ${results.length} available students for grade ${classroomGrade}`,
+    );
 
     res.status(200).json({ success: true, students: results });
   } catch (err) {
@@ -303,11 +309,6 @@ const sendClassroomInviteForStudent = async (
   req: AuthRequest,
   res: Response,
 ) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const { studentId } = req.body;
   const { code } = req.params;
 
@@ -368,11 +369,6 @@ const sendClassroomInviteForStudent = async (
 };
 
 const fetchClassroomInvites = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const studentId = req.user!.userId;
 
   // Step 1: Query pending invites with hidden flag
@@ -390,11 +386,17 @@ const fetchClassroomInvites = async (req: AuthRequest, res: Response) => {
         ON hi.invite_id = cm.id AND hi.student_id = ?
       WHERE cm.student_id = ?
         AND cm.status = 'pending'
+      ORDER BY cm.id DESC
     `;
 
   try {
     // Step 2: Execute query (studentId appears twice for LEFT JOIN)
     const results = await queryAsync<InviteRow>(sql, [studentId, studentId]);
+
+    console.log(
+      `[fetchClassroomInvites] Found ${results.length} invites for student ${studentId}:`,
+      results,
+    );
 
     // Step 3: Return invitations
     res.status(200).json({ success: true, invites: results });
@@ -409,13 +411,26 @@ const dismissInvite = async (req: AuthRequest, res: Response) => {
   const studentId = req.user!.userId;
 
   try {
-    // Step 1: Insert hide record (duplicate-safe)
+    // Step 1: Verify the invite exists and belongs to the student
+    const inviteRows = await queryAsync<ClassroomMemberRow>(
+      "SELECT id, classroom_id FROM classroom_members WHERE id = ? AND student_id = ? LIMIT 1",
+      [inviteId, studentId],
+    );
+
+    if (!inviteRows.length) {
+      return res.status(404).json({
+        success: false,
+        error: "Invite not found or not authorized",
+      });
+    }
+
+    // Step 2: Insert hide record (use INSERT IGNORE to handle duplicates)
     await db.query<ResultSetHeader>(
-      "INSERT INTO hidden_invites (student_id, invite_id) VALUES (?, ?)",
+      "INSERT IGNORE INTO hidden_invites (student_id, invite_id) VALUES (?, ?)",
       [studentId, inviteId],
     );
 
-    // Step 2: Return success
+    // Step 3: Return success
     res.status(200).json({ success: true });
   } catch (err) {
     console.error("Error hiding invite:", err);
@@ -423,12 +438,39 @@ const dismissInvite = async (req: AuthRequest, res: Response) => {
   }
 };
 
-const acceptInvite = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
+const undismissInvite = async (req: AuthRequest, res: Response) => {
+  const { inviteId } = req.params;
+  const studentId = req.user!.userId;
 
+  try {
+    // Step 1: Verify the invite exists and belongs to the student
+    const inviteRows = await queryAsync<ClassroomMemberRow>(
+      "SELECT id FROM classroom_members WHERE id = ? AND student_id = ? LIMIT 1",
+      [inviteId, studentId],
+    );
+
+    if (!inviteRows.length) {
+      return res.status(404).json({
+        success: false,
+        error: "Invite not found or not authorized",
+      });
+    }
+
+    // Step 2: Delete hide record
+    await db.query<ResultSetHeader>(
+      "DELETE FROM hidden_invites WHERE student_id = ? AND invite_id = ?",
+      [studentId, inviteId],
+    );
+
+    // Step 3: Return success
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Error unhiding invite:", err);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+};
+
+const acceptInvite = async (req: AuthRequest, res: Response) => {
   const studentId = req.user!.userId;
   const { inviteId } = req.params;
 
@@ -463,11 +505,6 @@ const acceptInvite = async (req: AuthRequest, res: Response) => {
 };
 
 const enterByClassroomByCode = async (req: AuthRequest, res: Response) => {
-  // Guard: Check database availability
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const studentId = req.user!.userId;
   const { code } = req.body;
 
@@ -598,7 +635,6 @@ const checkIfStudentIsClassroomMember = async (
   req: AuthRequest,
   res: Response,
 ) => {
-  // Guard: Check database availability
   if (!(req as any).dbAvailable) {
     return res
       .status(503)
@@ -662,17 +698,18 @@ const checkIfStudentIsClassroomMember = async (
 };
 
 const controller = {
+  acceptInvite,
   checkIfStudentIsEnrolled,
+  checkIfStudentIsClassroomMember,
   checkIfTeacherHasClassroom,
   createClassroom,
-  modifySectionTeacher,
-  fetchUnenrolledStudents,
-  sendClassroomInviteForStudent,
-  fetchClassroomInvites,
   dismissInvite,
-  acceptInvite,
   enterByClassroomByCode,
-  checkIfStudentIsClassroomMember,
+  fetchClassroomInvites,
+  fetchUnenrolledStudents,
+  modifySectionTeacher,
+  sendClassroomInviteForStudent,
+  undismissInvite,
 };
 
 export default controller;
