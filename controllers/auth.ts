@@ -97,6 +97,8 @@ const checkSession = async (req: AuthRequest, res: Response) => {
       "email",
       "role",
       "section",
+      "grade",
+      "student_number",
     ]);
 
     // Check if user still exists (could have been deleted)
@@ -106,6 +108,7 @@ const checkSession = async (req: AuthRequest, res: Response) => {
     }
 
     console.info("[AUTH] GET /session responding", { userId });
+    console.table(user);
     return res.json({ success: true, user });
   } catch (err) {
     const error = err as Error;
@@ -325,10 +328,6 @@ const logout = (req: AuthRequest, res: Response) => {
 };
 
 const signup = async (req: AuthRequest, res: Response) => {
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const { username, email, password, role, section, grade, studentNumber } =
     req.body;
 
@@ -406,10 +405,6 @@ const signup = async (req: AuthRequest, res: Response) => {
 };
 
 const requestVerification = async (req: AuthRequest, res: Response) => {
-  if (!(req as any).dbAvailable) {
-    return res.status(503).json({ ok: false, error: "Database not available" });
-  }
-
   const { email, role } = req.body;
 
   if (!email || !role) {
@@ -583,7 +578,42 @@ const resetPassword = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const changeUsername = async (req: AuthRequest, res: Response) => {
+  const { newUsername, currentPassword } = req.body;
+  const userId = req.user!.userId;
+  console.log(`[changeUsername] The entered new username: ${newUsername}`);
+
+  try {
+    const user = await findOneUserBy<UserRow>("ID", userId);
+    if (!user) {
+      console.warn("[changeUsername] User does not exist,", user);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await updateRecord(
+      "users",
+      {
+        username: newUsername,
+      },
+      {
+        ID: userId,
+      },
+    );
+
+    console.info("[changeUsername] Username updated successfully");
+    return res.json({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (e) {
+    const error = e as Error;
+    console.error("[changeUsername] Change Username error:", error);
+    return res.status(500).json({ error: "Server error" });
+  }
+};
+
 const controller = {
+  changeUsername,
   checkSession,
   checkUserProfile,
   studentSetSection,

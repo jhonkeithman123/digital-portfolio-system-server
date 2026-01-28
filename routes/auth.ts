@@ -209,4 +209,10 @@ router.post("/verify-code", wrapAsync(controller.verifyCode));
  */
 router.patch("/reset-password", wrapAsync(controller.resetPassword));
 
+router.patch(
+  "/change-username",
+  verifyToken,
+  wrapAsync(controller.changeUsername),
+);
+
 export default router;
