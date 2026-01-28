@@ -66,13 +66,13 @@ CREATE TABLE `activity_submissions` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  KEY `fk_submission_grader` (`graded_by`),
   KEY `idx_activity` (`activity_id`),
   KEY `idx_student` (`student_id`),
   KEY `idx_graded` (`graded_at`),
+  KEY `graded_by` (`graded_by`),
+  CONSTRAINT `activity_submissions_ibfk_1` FOREIGN KEY (`graded_by`) REFERENCES `users` (`ID`) ON DELETE CASCADE,
   CONSTRAINT `fk_sub_activity` FOREIGN KEY (`activity_id`) REFERENCES `activities` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_sub_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE,
-  CONSTRAINT `fk_submission_grader` FOREIGN KEY (`graded_by`) REFERENCES `users` (`ID`) ON DELETE SET NULL
+  CONSTRAINT `fk_sub_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `activity_submissions` (`id`, `activity_id`, `student_id`, `file_path`, `original_name`, `mime_type`, `score`, `graded_at`, `graded_by`, `created_at`, `updated_at`) VALUES
@@ -110,8 +110,8 @@ CREATE TABLE `classroom_members` (
   PRIMARY KEY (`id`),
   KEY `link3` (`classroom_id`),
   KEY `link4` (`student_id`),
-  CONSTRAINT `link3` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`),
-  CONSTRAINT `link4` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`)
+  CONSTRAINT `classroom_members_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `classroom_members_ibfk_2` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `classroom_members` (`id`, `classroom_id`, `student_id`, `joined_at`, `status`, `code`, `name`) VALUES
@@ -134,7 +134,7 @@ CREATE TABLE `comments` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `comments_ibfk_1` FOREIGN KEY (`activity_id`) REFERENCES `activities` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `comments_ibfk_2` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `comments_ibfk_3` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`)
+  CONSTRAINT `comments_ibfk_3` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `comments` (`id`, `classroom_id`, `activity_id`, `user_id`, `comment`, `created_at`, `updated_at`, `edited`) VALUES
@@ -153,7 +153,7 @@ CREATE TABLE `comment_replies` (
   KEY `comment_id` (`comment_id`),
   KEY `user_id` (`user_id`),
   CONSTRAINT `comment_replies_ibfk_1` FOREIGN KEY (`comment_id`) REFERENCES `comments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `comment_replies_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`)
+  CONSTRAINT `comment_replies_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `comment_replies` (`id`, `user_id`, `comment_id`, `reply`, `created_at`, `updated_at`, `edited`) VALUES
@@ -168,8 +168,8 @@ CREATE TABLE `hidden_invites` (
   PRIMARY KEY (`id`),
   KEY `student_id` (`student_id`),
   KEY `invite_id` (`invite_id`),
-  CONSTRAINT `hidden_invites_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`),
-  CONSTRAINT `hidden_invites_ibfk_2` FOREIGN KEY (`invite_id`) REFERENCES `classroom_members` (`id`)
+  CONSTRAINT `hidden_invites_ibfk_3` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `hidden_invites_ibfk_4` FOREIGN KEY (`invite_id`) REFERENCES `classroom_members` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
@@ -183,7 +183,7 @@ CREATE TABLE `logging` (
   `role` varchar(50) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `FOREIGN KEY` (`user_id`),
-  CONSTRAINT `FOREIGN KEY` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`)
+  CONSTRAINT `logging_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
@@ -202,84 +202,10 @@ CREATE TABLE `notifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO `notifications` (`id`, `recipient_id`, `sender_id`, `type`, `message`, `link`, `is_read`, `created_at`, `updated_at`) VALUES
-(1,	2,	1,	'invite',	'You\'ve been invited to join classroom CmjkLbWzAE',	'/classrooms/CmjkLbWzAE',	0,	'2026-01-05 14:52:23',	'0000-00-00 00:00:00'),
+(1,	2,	1,	'invite',	'You\'ve been invited to join classroom CmjkLbWzAE',	'/classrooms/CmjkLbWzAE',	1,	'2026-01-26 20:21:25',	'2026-01-26 20:21:25'),
 (2,	2,	1,	'grade',	'Your activity \"Activity\" was graded 98/100.',	'/activity/1/view',	1,	'2026-01-05 14:57:51',	'2026-01-05 14:57:51'),
 (3,	2,	1,	'grade',	'Your quiz \"Sample Quiz\" was graded.',	'/quizzes/CmjkLbWzAE/quizzes/1/results',	1,	'2026-01-05 15:12:38',	'2026-01-05 15:12:38'),
 (4,	6,	5,	'invite',	'You\'ve been invited to join classroom 14R8WDFxDK',	'/classrooms/14R8WDFxDK',	0,	'2026-01-22 13:43:46',	'0000-00-00 00:00:00');
-
-DROP TABLE IF EXISTS `quizzes`;
-CREATE TABLE `quizzes` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `classroom_id` int(11) NOT NULL,
-  `teacher_id` int(10) unsigned NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `questions` text DEFAULT NULL,
-  `attempts` int(10) unsigned NOT NULL DEFAULT 0,
-  `attempts_allowed` int(10) unsigned DEFAULT NULL,
-  `start_time` datetime DEFAULT NULL,
-  `end_time` datetime DEFAULT NULL,
-  `time_limit_seconds` int(11) unsigned DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `fk_quizzes_classroom` (`classroom_id`),
-  CONSTRAINT `fk_quizzes_classroom` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-INSERT INTO `quizzes` (`id`, `classroom_id`, `teacher_id`, `title`, `questions`, `attempts`, `attempts_allowed`, `start_time`, `end_time`, `time_limit_seconds`, `created_at`, `updated_at`) VALUES
-(1,	1,	1,	'Sample Quiz',	NULL,	0,	3,	NULL,	NULL,	3600,	'2026-01-05 07:03:19',	'0000-00-00 00:00:00'),
-(3,	2,	5,	'Sample Quiz',	NULL,	0,	5,	NULL,	NULL,	3600,	'2026-01-22 05:48:49',	'0000-00-00 00:00:00');
-
-DROP TABLE IF EXISTS `quiz_attempts`;
-CREATE TABLE `quiz_attempts` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `quiz_id` int(10) unsigned NOT NULL,
-  `student_id` int(10) unsigned NOT NULL,
-  `attempt_no` int(10) unsigned NOT NULL,
-  `answers` mediumtext DEFAULT NULL,
-  `score` int(11) DEFAULT NULL,
-  `grading` mediumtext DEFAULT NULL,
-  `comment` varchar(255) DEFAULT NULL,
-  `graded_at` timestamp NULL DEFAULT NULL,
-  `grader_id` int(11) DEFAULT NULL,
-  `status` enum('in_progress','needs_grading','completed') NOT NULL DEFAULT 'in_progress',
-  `started_at` datetime NOT NULL,
-  `submitted_at` datetime DEFAULT NULL,
-  `expires_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_quiz_student_attempt` (`quiz_id`,`student_id`,`attempt_no`),
-  KEY `quiz_id` (`quiz_id`),
-  KEY `student_id` (`student_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-INSERT INTO `quiz_attempts` (`id`, `quiz_id`, `student_id`, `attempt_no`, `answers`, `score`, `grading`, `comment`, `graded_at`, `grader_id`, `status`, `started_at`, `submitted_at`, `expires_at`) VALUES
-(13,	1,	1,	1,	'{\"q-eo4u002\":\"0\",\"q-qx5uxy1\":\"sdawdw\",\"q-zobxd32\":\"ddefef\",\"q-6d1ge9v\":[\"0\",\"1\",\"2\",\"3\"]}',	NULL,	'{\"q-eo4u002\":{\"correct\":true,\"given\":\"0\",\"expected\":\"0\",\"scored\":true},\"q-qx5uxy1\":{\"requiresManualGrading\":true,\"answer\":\"sdawdw\",\"scored\":false},\"q-zobxd32\":{\"requiresManualGrading\":true,\"answer\":\"ddefef\",\"scored\":false},\"q-6d1ge9v\":{\"correct\":true,\"given\":[\"0\",\"1\",\"2\",\"3\"],\"expected\":[0,1,2,3],\"scored\":true}}',	NULL,	NULL,	NULL,	'needs_grading',	'2026-01-22 00:04:43',	'2026-01-22 00:29:02',	'2026-01-22 01:04:43'),
-(14,	3,	5,	1,	'{\"q-pdbk0kf\":\"sdwrw\",\"q-1qqmxlv\":\"0\",\"q-x1vnhon\":\"feafadf\",\"q-vb5s52j\":[\"0\",\"1\",\"2\",\"3\"]}',	NULL,	'{\"q-pdbk0kf\":{\"correct\":false,\"given\":\"sdwrw\",\"expected\":\"this is a sample quiz\",\"scored\":true},\"q-1qqmxlv\":{\"correct\":true,\"given\":\"0\",\"expected\":\"0\",\"scored\":true},\"q-x1vnhon\":{\"requiresManualGrading\":true,\"answer\":\"feafadf\",\"scored\":false},\"q-vb5s52j\":{\"correct\":true,\"given\":[\"0\",\"1\",\"2\",\"3\"],\"expected\":[0,1,2,3],\"scored\":true}}',	NULL,	NULL,	NULL,	'needs_grading',	'2026-01-22 16:02:11',	'2026-01-22 16:02:28',	'2026-01-22 17:02:11'),
-(15,	3,	5,	2,	'{}',	NULL,	NULL,	NULL,	NULL,	NULL,	'in_progress',	'2026-01-22 16:02:36',	NULL,	'2026-01-22 17:02:36'),
-(16,	3,	5,	3,	'{}',	NULL,	NULL,	NULL,	NULL,	NULL,	'in_progress',	'2026-01-22 17:03:56',	NULL,	'2026-01-22 18:03:56');
-
-DROP TABLE IF EXISTS `quiz_pages`;
-CREATE TABLE `quiz_pages` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `quiz_id` int(11) unsigned NOT NULL,
-  `page_index` int(11) unsigned NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `content_json` longtext NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_qp_quiz` (`quiz_id`,`page_index`),
-  CONSTRAINT `fk_qp_quiz` FOREIGN KEY (`quiz_id`) REFERENCES `quizzes` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-INSERT INTO `quiz_pages` (`id`, `quiz_id`, `page_index`, `title`, `content_json`, `created_at`) VALUES
-(1,	1,	0,	'Page 1',	'{\"questions\":[{\"id\":\"q-eo4u002\",\"type\":\"multiple_choice\",\"text\":\"Sample question 1\",\"requiresManualGrading\":false,\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":\"0\"}]}',	'2026-01-05 07:03:19'),
-(2,	1,	1,	'Page 2',	'{\"questions\":[{\"id\":\"q-qx5uxy1\",\"type\":\"short_answer\",\"text\":\"Sample question 2\",\"requiresManualGrading\":true,\"sentenceLimit\":1,\"correctAnswer\":\"\"}]}',	'2026-01-05 07:03:19'),
-(3,	1,	2,	'Page 3',	'{\"questions\":[{\"id\":\"q-zobxd32\",\"type\":\"paragraph\",\"text\":\"Sample question 3\",\"requiresManualGrading\":true,\"sentenceLimit\":3,\"correctAnswer\":\"\"}]}',	'2026-01-05 07:03:19'),
-(4,	1,	3,	'Page 4',	'{\"questions\":[{\"id\":\"q-6d1ge9v\",\"type\":\"checkboxes\",\"text\":\"Sample question 4\",\"requiresManualGrading\":false,\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[0,1,2,3]}]}',	'2026-01-05 07:03:19'),
-(25,	3,	0,	'Page 2',	'{\"questions\":[{\"id\":\"q-pdbk0kf\",\"type\":\"short_answer\",\"text\":\"This is a sample question 2\",\"requiresManualGrading\":false,\"sentenceLimit\":2,\"correctAnswer\":\"this is a sample quiz\"},{\"id\":\"q-991bkpq\",\"type\":\"multiple_choice\",\"text\":\"New question\",\"requiresManualGrading\":false,\"options\":[\"a\",\"a\",\"a\",\"a\"],\"correctAnswer\":\"0\"},{\"id\":\"q-ov8fz0p\",\"type\":\"multiple_choice\",\"text\":\"New question\",\"requiresManualGrading\":false,\"options\":[\"b\",\"b\",\"b\",\"b\"],\"correctAnswer\":\"2\"}]}',	'2026-01-22 08:18:33'),
-(26,	3,	1,	'Page 1',	'{\"questions\":[{\"id\":\"q-1qqmxlv\",\"type\":\"multiple_choice\",\"text\":\"This is a sample question 1\",\"requiresManualGrading\":false,\"options\":[\"sample answer 1\",\"sample answer 2\",\"sample answer 3\",\"sample answer 4\"],\"correctAnswer\":\"0\"},{\"id\":\"q-24zr0hf\",\"type\":\"multiple_choice\",\"text\":\"New question\",\"requiresManualGrading\":false,\"options\":[\"a\",\"b\",\"c\",\"d\"],\"correctAnswer\":\"2\"}]}',	'2026-01-22 08:18:33'),
-(27,	3,	2,	'Page 3',	'{\"questions\":[{\"id\":\"q-x1vnhon\",\"type\":\"paragraph\",\"text\":\"This is a sample question 3\",\"requiresManualGrading\":true,\"sentenceLimit\":3,\"correctAnswer\":\"You can also answer anything here, this just have longer minimum sentence required\"},{\"id\":\"q-b03bfr5\",\"type\":\"multiple_choice\",\"text\":\"New question\",\"requiresManualGrading\":false,\"options\":[\"1\",\"2\",\"3\",\"4\"],\"correctAnswer\":\"0\"}]}',	'2026-01-22 08:18:33'),
-(28,	3,	3,	'Page 4',	'{\"questions\":[{\"id\":\"q-vb5s52j\",\"type\":\"checkboxes\",\"text\":\"This is a sample question 4\",\"requiresManualGrading\":false,\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correctAnswer\":[0,1,2,3]},{\"id\":\"q-l6oie1x\",\"type\":\"multiple_choice\",\"text\":\"New question\",\"requiresManualGrading\":false,\"options\":[\"2\",\"3\",\"5\",\"6\"],\"correctAnswer\":\"0\"}]}',	'2026-01-22 08:18:33');
 
 DROP TABLE IF EXISTS `session`;
 CREATE TABLE `session` (
@@ -341,7 +267,9 @@ INSERT INTO `session` (`id`, `user_id`, `token`, `expires_at`) VALUES
 (47,	5,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjUsImVtYWlsIjoibmlrb3NhY3JvNkBnbWFpbC5jb20iLCJyb2xlIjoidGVhY2hlciIsInVzZXJuYW1lIjoic2Fjcm8iLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3NjkwNzY1OTYsImV4cCI6MTc2OTE2Mjk5Nn0.bx5OZ0q39R9gXp_8OxoRatrClq748yK22oXPxe7_SuA',	'2026-01-23 18:09:56'),
 (48,	5,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjUsImVtYWlsIjoibmlrb3NhY3JvNkBnbWFpbC5jb20iLCJyb2xlIjoidGVhY2hlciIsInVzZXJuYW1lIjoic2Fjcm8iLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3NjkwNzY5MzIsImV4cCI6MTc2OTE2MzMzMn0.lk9lJF132jE37wLxFwizN08JZOKHUI5mKTMaqa0isDw',	'2026-01-23 18:15:32'),
 (49,	1,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoia2VpdGh2aXJnZW5lczE3QGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwidXNlcm5hbWUiOiIxMzFmZ2giLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3NjkwNzY5NDIsImV4cCI6MTc2OTE2MzM0Mn0.kxM5bw3CDznjiQ5f2LjB1dAfV-SGRatyyB-RwWX6eNI',	'2026-01-23 18:15:42'),
-(50,	2,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsImVtYWlsIjoianVzdGluZWFiZG9uNzFAZ21haWwuY29tIiwicm9sZSI6InN0dWRlbnQiLCJ1c2VybmFtZSI6IjEzMWZnaiIsInNlY3Rpb24iOiJJQ1QtQTIiLCJpYXQiOjE3NjkwNzg1MzIsImV4cCI6MTc2OTE2NDkzMn0.9n1cWFW5qBYI6D-eyLd8KXF0-nfNZxFMJk4m_G45Sy8',	'2026-01-23 18:42:12');
+(50,	2,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsImVtYWlsIjoianVzdGluZWFiZG9uNzFAZ21haWwuY29tIiwicm9sZSI6InN0dWRlbnQiLCJ1c2VybmFtZSI6IjEzMWZnaiIsInNlY3Rpb24iOiJJQ1QtQTIiLCJpYXQiOjE3NjkwNzg1MzIsImV4cCI6MTc2OTE2NDkzMn0.9n1cWFW5qBYI6D-eyLd8KXF0-nfNZxFMJk4m_G45Sy8',	'2026-01-23 18:42:12'),
+(51,	2,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsImVtYWlsIjoianVzdGluZWFiZG9uNzFAZ21haWwuY29tIiwicm9sZSI6InN0dWRlbnQiLCJ1c2VybmFtZSI6IjEzMWZnaiIsInNlY3Rpb24iOiJJQ1QtQTIiLCJpYXQiOjE3Njk0MTQzODYsImV4cCI6MTc2OTUwMDc4Nn0.ppTVFRdbak6jzjxay7JqXzuI2XXjlY5lVL9Qf_yYdMA',	'2026-01-27 15:59:46'),
+(52,	2,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjIsImVtYWlsIjoianVzdGluZWFiZG9uNzFAZ21haWwuY29tIiwicm9sZSI6InN0dWRlbnQiLCJ1c2VybmFtZSI6IjEzMWZnaiIsInNlY3Rpb24iOiJJQ1QtQTIiLCJpYXQiOjE3Njk0MzAwNzcsImV4cCI6MTc2OTUxNjQ3N30.udTE3fIhgawiIYnvIvidc4dpkeYizklSsOGyTbmMJhc',	'2026-01-27 20:21:17');
 
 DROP TABLE IF EXISTS `submissions`;
 CREATE TABLE `submissions` (
@@ -354,8 +282,8 @@ CREATE TABLE `submissions` (
   PRIMARY KEY (`id`),
   KEY `link2` (`student_id`),
   KEY `FOREIGN KEY (classroom)` (`classroom_id`),
-  CONSTRAINT `FOREIGN KEY (classroom)` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`),
-  CONSTRAINT `link2` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`)
+  CONSTRAINT `link2` FOREIGN KEY (`student_id`) REFERENCES `users` (`ID`),
+  CONSTRAINT `submissions_ibfk_1` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
@@ -365,6 +293,8 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL,
   `username` varchar(255) NOT NULL,
   `section` varchar(64) DEFAULT NULL,
+  `student_number` varchar(255) NOT NULL,
+  `grade` varchar(2) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `role` varchar(50) NOT NULL,
   `verification_code` varchar(6) DEFAULT NULL,
@@ -374,10 +304,11 @@ CREATE TABLE `users` (
   KEY `idx_users_section` (`section`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-INSERT INTO `users` (`ID`, `email`, `username`, `section`, `password`, `role`, `verification_code`, `verification_expiry`, `is_verified`) VALUES
-(1,	'keithvirgenes17@gmail.com',	'131fgh',	NULL,	'$2b$10$Wc5PEODVKQUr8g1tbucUbuyZvT2D60h1MneVadCtHe1iq1.jtru3y',	'teacher',	NULL,	NULL,	0),
-(2,	'justineabdon71@gmail.com',	'131fgj',	'ICT-A2',	'$2b$10$oXd0VRA0jDUhaPgcYDGQROCg93bDFNR7UtK68gBMM9YJNI7I95j8u',	'student',	NULL,	NULL,	0),
-(5,	'nikosacro6@gmail.com',	'sacro',	NULL,	'$2b$10$MO79gs3dtS1oKse.AqTStu57MHmoPHPYQcKuYniow3pz9ARMpTdKe',	'teacher',	NULL,	NULL,	0),
-(6,	'nikoycute7@gmail.com',	'sampleStudent',	'ICT-A2',	'$2b$10$.5a79K1yP0xAYRi8P28Bv.B2Vekj.5X58Jc08JnTDJwFUc6.cefLe',	'student',	NULL,	NULL,	0);
+INSERT INTO `users` (`ID`, `email`, `username`, `section`, `student_number`, `grade`, `password`, `role`, `verification_code`, `verification_expiry`, `is_verified`) VALUES
+(1,	'keithvirgenes17@gmail.com',	'131fgh',	NULL,	'',	'',	'$2b$10$Wc5PEODVKQUr8g1tbucUbuyZvT2D60h1MneVadCtHe1iq1.jtru3y',	'teacher',	NULL,	NULL,	0),
+(2,	'justineabdon71@gmail.com',	'131fgj',	'ICT-A2',	'',	'',	'$2b$10$oXd0VRA0jDUhaPgcYDGQROCg93bDFNR7UtK68gBMM9YJNI7I95j8u',	'student',	NULL,	NULL,	0),
+(5,	'nikosacro6@gmail.com',	'sacro',	NULL,	'',	'',	'$2b$10$MO79gs3dtS1oKse.AqTStu57MHmoPHPYQcKuYniow3pz9ARMpTdKe',	'teacher',	NULL,	NULL,	0),
+(6,	'nikoycute7@gmail.com',	'sampleStudent',	'ICT-A2',	'',	'',	'$2b$10$.5a79K1yP0xAYRi8P28Bv.B2Vekj.5X58Jc08JnTDJwFUc6.cefLe',	'student',	NULL,	NULL,	0),
+(7,	'',	'',	NULL,	'',	'',	'',	'',	NULL,	NULL,	0);
 
--- 2026-01-22 13:47:32 UTC
+-- 2026-01-26 15:38:48 UTC

@@ -20,6 +20,7 @@
       "@/*": ["*"],
 
       /* Subfolders of root */
+      "controllers/*": ["controllers/*"],
       "types/*": ["types/*"],
       "routes/*": ["routes/*"],
       "middleware/*": ["middleware/*"],
@@ -38,5 +39,5 @@
       "helpers/*": ["config/helpers/*"]
     }
   },
-  "include": ["./*.ts", "./routes/*.ts", "types/*.ts"]
+  "include": ["types/*.d.ts", "./**/*.ts"]
 }

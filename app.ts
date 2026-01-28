@@ -18,7 +18,7 @@ import activities from "routes/activities";
 import showcase from "routes/showcase";
 import uploadStatic from "routes/uploads";
 
-import db from "config/db";
+import { checkDbAvailability, requireDb } from "./middleware/dbCheck";
 
 dotenv.config();
 
@@ -129,24 +129,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Database availability middleware
-type DBMiddleware = Request & {
-  dbAvailable: boolean;
-};
-
-app.use((req: Request, res: Response, next: NextFunction) => {
-  try {
-    const isAvailable = db.isDbAvailable ? db.isDbAvailable() : false;
-    const status = isAvailable ? "available" : "unavailable";
-
-    res.setHeader("X-DB-Status", status);
-    (req as DBMiddleware).dbAvailable = isAvailable;
-  } catch (e) {
-    (req as DBMiddleware).dbAvailable = false;
-    res.setHeader("X-DB-Status", "unknown");
-  }
-  next();
-});
+app.use(checkDbAvailability);
 
 // ============================================================================
 // ROUTES
@@ -174,15 +157,15 @@ app.get("/", (req: Request, res: Response, next: NextFunction): void => {
   );
 });
 
-app.use("/uploads", uploadStatic);
+app.use("/uploads", requireDb, uploadStatic);
 
 // API routes
-app.use("/", mainRoute);
-app.use("/auth", auth);
-app.use("/security", security);
-app.use("/classrooms", classrooms);
-app.use("/activity", activities);
-app.use("/showcase", showcase);
+app.use("/", requireDb, mainRoute);
+app.use("/auth", requireDb, auth);
+app.use("/security", requireDb, security);
+app.use("/classrooms", requireDb, classrooms);
+app.use("/activity", requireDb, activities);
+app.use("/showcase", requireDb, showcase);
 
 // ============================================================================
 // BROWSER REDIRECT MIDDLEWARE (must be AFTER API routes)
