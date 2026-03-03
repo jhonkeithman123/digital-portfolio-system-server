@@ -10,11 +10,12 @@ import type { Express, Request, Response, NextFunction } from "express";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import auth from "routes/auth";
-import mainRoute from "routes/default";
-import security from "routes/security";
-import classrooms from "routes/classrooms";
 import activities from "routes/activities";
+import auth from "routes/auth";
+import classrooms from "routes/classrooms";
+import mainRoute from "routes/default";
+import portfolioRoute from "routes/portfolio";
+import security from "routes/security";
 import showcase from "routes/showcase";
 import uploadStatic from "routes/uploads";
 
@@ -161,10 +162,11 @@ app.use("/uploads", requireDb, uploadStatic);
 
 // API routes
 app.use("/", requireDb, mainRoute);
-app.use("/auth", requireDb, auth);
-app.use("/security", requireDb, security);
-app.use("/classrooms", requireDb, classrooms);
 app.use("/activity", requireDb, activities);
+app.use("/auth", requireDb, auth);
+app.use("/classrooms", requireDb, classrooms);
+app.use("/portfolio", requireDb, portfolioRoute);
+app.use("/security", requireDb, security);
 app.use("/showcase", requireDb, showcase);
 
 // ============================================================================

@@ -21,13 +21,18 @@ CREATE TABLE `activities` (
   `mime_type` varchar(100) DEFAULT NULL,
   `max_score` int(11) DEFAULT 100,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `due_date` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `classroom_id` (`classroom_id`),
   KEY `teacher_id` (`teacher_id`),
+  KEY `idx_activities_due_date` (`due_date`),
   CONSTRAINT `activities_ibfk_1` FOREIGN KEY (`classroom_id`) REFERENCES `classrooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `activities_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+INSERT INTO `activities` (`id`, `classroom_id`, `teacher_id`, `title`, `file_path`, `original_name`, `mime_type`, `max_score`, `created_at`, `due_date`) VALUES
+(3,	5,	10,	'Sample Activity',	NULL,	NULL,	NULL,	100,	'2026-02-08 12:52:20',	NULL),
+(4,	5,	10,	'Sample Activity 2',	NULL,	NULL,	NULL,	100,	'2026-03-03 08:39:38',	'2026-03-03 16:41:00');
 
 DROP TABLE IF EXISTS `activity_instructions`;
 CREATE TABLE `activity_instructions` (
@@ -45,6 +50,9 @@ CREATE TABLE `activity_instructions` (
   CONSTRAINT `activity_instructions_ibfk_2` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`ID`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+INSERT INTO `activity_instructions` (`id`, `activity_id`, `teacher_id`, `instruction_text`, `created_at`, `updated_at`) VALUES
+(3,	3,	10,	'this is a sample activity',	'2026-02-08 12:52:21',	'2026-02-08 12:52:21'),
+(4,	4,	10,	'lol',	'2026-03-03 08:39:38',	'2026-03-03 08:39:38');
 
 DROP TABLE IF EXISTS `activity_submissions`;
 CREATE TABLE `activity_submissions` (
@@ -215,7 +223,11 @@ INSERT INTO `session` (`id`, `user_id`, `token`, `expires_at`) VALUES
 (63,	9,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjksImVtYWlsIjoia2VpdGh2aXJnZW5lczE3QGdtYWlsLmNvbSIsInJvbGUiOiJzdHVkZW50IiwidXNlcm5hbWUiOiIxMzFmZ2giLCJzZWN0aW9uIjoiSUNULUEyIiwiaWF0IjoxNzY5NDgzNzQwLCJleHAiOjE3Njk1NzAxNDB9.2Kjatiae3MkEREt-aViKWmbg4aOXtB7M0buIYxroYmw',	'2026-01-28 11:15:40'),
 (64,	11,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjExLCJlbWFpbCI6ImRpZ2l0YWxwb3J0Zm9saW9zeXN0ZW1AZ21haWwuY29tIiwicm9sZSI6InN0dWRlbnQiLCJ1c2VybmFtZSI6ImtlaXRoIiwic2VjdGlvbiI6IklDVC1BMSIsImlhdCI6MTc2OTQ4NDM4NCwiZXhwIjoxNzY5NTcwNzg0fQ.mDuZpDYie5oLwzz_HqCB3hpqwAAokJkM-FSxQySH3rI',	'2026-01-28 11:26:24'),
 (65,	9,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjksImVtYWlsIjoia2VpdGh2aXJnZW5lczE3QGdtYWlsLmNvbSIsInJvbGUiOiJzdHVkZW50IiwidXNlcm5hbWUiOiIxMzFmZ2giLCJzZWN0aW9uIjoiSUNULUEyIiwiaWF0IjoxNzY5NTk0MzI4LCJleHAiOjE3Njk2ODA3Mjh9.NFdlH_1n9cnM1Pl99WqljMb-AnjdLfNPqsP4HG0Co8M',	'2026-01-29 17:58:48'),
-(66,	10,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEwLCJlbWFpbCI6Imp1c3RpbmVhYmRvbjcxQGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwidXNlcm5hbWUiOiIxMzFmZ2oiLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3Njk1OTU4NzYsImV4cCI6MTc2OTY4MjI3Nn0.bx96oENrKRr4qhX81n52ULLxZEeF48ssuWtsq4fXjdc',	'2026-01-29 18:24:36');
+(66,	10,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEwLCJlbWFpbCI6Imp1c3RpbmVhYmRvbjcxQGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwidXNlcm5hbWUiOiIxMzFmZ2oiLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3Njk1OTU4NzYsImV4cCI6MTc2OTY4MjI3Nn0.bx96oENrKRr4qhX81n52ULLxZEeF48ssuWtsq4fXjdc',	'2026-01-29 18:24:36'),
+(67,	10,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEwLCJlbWFpbCI6Imp1c3RpbmVhYmRvbjcxQGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwidXNlcm5hbWUiOiIxMzFmZ2oiLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3NzA1NTQ4NDQsImV4cCI6MTc3MDY0MTI0NH0.UIIWj0L9gCGQ4SDk9dX-KmIWtylcRx4n0cFNqpwFfSI',	'2026-02-09 20:47:24'),
+(68,	10,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEwLCJlbWFpbCI6Imp1c3RpbmVhYmRvbjcxQGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwidXNlcm5hbWUiOiIxMzFmZ2oiLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3NzI1MjE2NzgsImV4cCI6MTc3MjYwODA3OH0.dJ_KP6ULHdrCVpq3wqLP0ADVnc1_MvfcJ306ganKshU',	'2026-03-04 15:07:58'),
+(69,	9,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjksImVtYWlsIjoia2VpdGh2aXJnZW5lczE3QGdtYWlsLmNvbSIsInJvbGUiOiJzdHVkZW50IiwidXNlcm5hbWUiOiJLZWl0aCIsInNlY3Rpb24iOiJJQ1QtQTIiLCJpYXQiOjE3NzI1MjE3NDMsImV4cCI6MTc3MjYwODE0M30.VcvTVkJdelarpG2qi20pUMykTJwhImlJBBGxLEFvfJM',	'2026-03-04 15:09:03'),
+(70,	10,	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEwLCJlbWFpbCI6Imp1c3RpbmVhYmRvbjcxQGdtYWlsLmNvbSIsInJvbGUiOiJ0ZWFjaGVyIiwidXNlcm5hbWUiOiIxMzFmZ2oiLCJzZWN0aW9uIjpudWxsLCJpYXQiOjE3NzI1MjE3OTQsImV4cCI6MTc3MjYwODE5NH0.Eyx1bOU01WFzcIMETpj6p2ZwUMZSYtpaF0kt5lZJVXA',	'2026-03-04 15:09:54');
 
 DROP TABLE IF EXISTS `submissions`;
 CREATE TABLE `submissions` (
@@ -255,4 +267,4 @@ INSERT INTO `users` (`ID`, `email`, `username`, `section`, `student_number`, `gr
 (10,	'justineabdon71@gmail.com',	'131fgj',	NULL,	NULL,	NULL,	'$2b$10$cO4VPg7cvbXK3SWLy73KAOvIHy.oIX3BVB4G.VPyO/w6dldXFDO42',	'teacher',	NULL,	NULL,	1),
 (11,	'digitalportfoliosystem@gmail.com',	'keith',	'ICT-A1',	'AUJS-SHS-AH-24-00531',	'11',	'$2b$10$xRnPBZxwHpkPRlcmVIX9QOR8uFSkFBMrc8AmGk3J0LXR2HusrATYm',	'student',	NULL,	NULL,	1);
 
--- 2026-02-06 14:42:01 UTC
+-- 2026-03-03 08:56:08 UTC

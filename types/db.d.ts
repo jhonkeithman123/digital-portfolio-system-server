@@ -18,6 +18,7 @@ export interface ActivityRow extends RowDataPacket {
   mime_type: string | null;
   max_score: number;
   created_at: Date;
+  due_date?: Date | null;
 }
 
 export interface InstructionEntry extends RowDataPacket {
@@ -95,30 +96,6 @@ export interface NotificationRow extends RowDataPacket {
   message: string;
   link: string | null;
   is_read: 0 | 1 | null;
-  created_at: Date;
-}
-
-export interface QuizRow extends RowDataPacket {
-  id: number;
-  classroom_id: number;
-  teacher_id: number;
-  title: string;
-  questions: string; // JSON string
-  attempts: number;
-  attempts_allowed: number;
-  start_time: Date | null;
-  end_time: Date | null;
-  time_limit_seconds: number | null;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface QuizAttemptRow extends RowDataPacket {
-  id: number;
-  quiz_id: number;
-  page_index: number;
-  title: string;
-  content_json: string; // JSON string
   created_at: Date;
 }
 

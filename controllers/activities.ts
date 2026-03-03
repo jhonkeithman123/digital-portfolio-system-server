@@ -612,7 +612,8 @@ const createActivity = async (
     if (req.user!.role !== "teacher")
       return res.status(403).json({ success: false, error: "Forbidden" });
 
-    const { title, instructions, classroomCode, max_score } = req.body;
+    const { title, instructions, classroomCode, max_score, due_date } =
+      req.body;
     if (!title || !instructions || !classroomCode) {
       return res
         .status(400)
@@ -631,10 +632,19 @@ const createActivity = async (
     const file = req.file || null;
     const maxScoreValue = parseInt(max_score, 10) || 100;
 
+    // Parse and validate due_date
+    let dueDateValue = null;
+    if (due_date) {
+      const parsed = new Date(due_date);
+      if (!isNaN(parsed.getTime())) {
+        dueDateValue = parsed;
+      }
+    }
+
     const [result] = await db.query<RowDataPacket[]>(
       `INSERT INTO activities
-        (classroom_id, teacher_id, title, file_path, original_name, mime_type, max_score)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (classroom_id, teacher_id, title, file_path, original_name, mime_type, max_score, due_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         classroom.id,
         req.user!.userId,
@@ -643,6 +653,7 @@ const createActivity = async (
         file ? file.originalname : null,
         file ? file.mimetype : null,
         maxScoreValue,
+        dueDateValue,
       ],
     );
 
